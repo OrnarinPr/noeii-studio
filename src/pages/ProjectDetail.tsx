@@ -3,252 +3,196 @@ import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useEffect, useState } from "react";
-
-import slide1 from "@/assets/slides/slide-1.jpg";
-import slide2 from "@/assets/slides/slide-2.jpg";
-import slide3 from "@/assets/slides/slide-3.jpg";
-import slide4 from "@/assets/slides/slide-4.jpg";
-
-const projectsData = [
-  {
-    id: "1",
-    image: slide1,
-    title: "NASU RETREAT",
-    subtitle: "雄大な自然に浮かびあがる鉄の彫刻",
-    location: "Nasu, Japan",
-    year: "2024",
-    category: "Hotel",
-    material: "Corten Steel",
-    description: "A sanctuary where weathered steel meets untouched nature. This retreat emerges from the landscape as if it has always been there, its oxidized surfaces echoing the autumn hues of the surrounding forests.",
-    details: [
-      "The building's form was derived from the natural contours of the hillside, creating a seamless integration between architecture and landscape.",
-      "Corten steel cladding develops a protective patina over time, requiring minimal maintenance while providing a warm, organic aesthetic.",
-      "Floor-to-ceiling windows frame panoramic views of Mount Nasu, transforming each room into a living painting.",
-    ],
-    area: "2,400 m²",
-    status: "Completed",
-  },
-  {
-    id: "2",
-    image: slide2,
-    title: "MOUNTAIN VIEW HOUSE",
-    subtitle: "草原の風景と思考の家",
-    location: "Kyoto, Japan",
-    year: "2023",
-    category: "Residence",
-    material: "Concrete",
-    description: "A meditative dwelling that celebrates the dialogue between solid and void. The concrete structure floats above the meadow, offering uninterrupted views of the distant mountains.",
-    details: [
-      "The cantilevered design minimizes the building's footprint while maximizing visual connection to the landscape.",
-      "Exposed concrete surfaces are hand-finished to reveal subtle variations in texture and tone.",
-      "Internal courtyards bring natural light deep into the home while maintaining privacy.",
-    ],
-    area: "380 m²",
-    status: "Completed",
-  },
-  {
-    id: "3",
-    image: slide3,
-    title: "FLOATING PAVILION",
-    subtitle: "開かれた別荘",
-    location: "Osaka, Japan",
-    year: "2023",
-    category: "Villa",
-    material: "Water",
-    description: "Architecture as a bridge between earth and sky. This pavilion appears to hover above its reflecting pool, creating an ever-changing interplay of light, water, and space.",
-    details: [
-      "The reflecting pool extends the interior space visually, blurring the boundary between inside and outside.",
-      "Operable glass walls allow the living spaces to open completely to the surrounding water garden.",
-      "The roof's gentle curve was designed to collect rainwater, which feeds the surrounding landscape.",
-    ],
-    area: "520 m²",
-    status: "Completed",
-  },
-  {
-    id: "4",
-    image: slide4,
-    title: "FOREST HOTEL",
-    subtitle: "Times of coexistence",
-    location: "Tokyo, Japan",
-    year: "2022",
-    category: "Hotel",
-    material: "Interior",
-    description: "An urban retreat that brings the serenity of the forest into the heart of the city. Natural materials and biophilic design principles create spaces for rest and reflection.",
-    details: [
-      "Living walls and indoor gardens filter air and create a connection to nature within the urban context.",
-      "Japanese timber joinery techniques are used throughout, celebrating traditional craftsmanship.",
-      "Each guest room offers views of private garden terraces, providing moments of tranquility.",
-    ],
-    area: "8,200 m²",
-    status: "Completed",
-  },
-];
+import { useQuery } from "@tanstack/react-query";
+import { getProjectById, listProjects } from "@/services/projects";
+import NotFound from "./NotFound";
 
 const ProjectDetail = () => {
   const { id } = useParams();
-  const [isLoaded, setIsLoaded] = useState(false);
   const [parallaxOffset, setParallaxOffset] = useState(0);
-  
-  const project = projectsData.find(p => p.id === id);
-  const currentIndex = projectsData.findIndex(p => p.id === id);
-  const prevProject = currentIndex > 0 ? projectsData[currentIndex - 1] : null;
-  const nextProject = currentIndex < projectsData.length - 1 ? projectsData[currentIndex + 1] : null;
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects"],
+    queryFn: listProjects,
+  });
+
+  const { data: project } = useQuery({
+    queryKey: ["project", id],
+    queryFn: () => getProjectById(id ?? ""),
+    enabled: !!id,
+  });
 
   useEffect(() => {
-    setIsLoaded(true);
-    window.scrollTo(0, 0);
-
-    const handleScroll = () => {
-      setParallaxOffset(window.scrollY * 0.3);
-    };
-
-    window.addEventListener("scroll", handleScroll);
+    const handleScroll = () => setParallaxOffset(window.scrollY * 0.4);
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [id]);
+  }, []);
 
-  if (!project) {
+  if (!id || project === undefined) {
+    // while query resolves (instant for static, but safe)
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-display mb-4">Project Not Found</h1>
-          <Link to="/projects" className="text-caption link-underline">
-            Back to Projects
-          </Link>
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="container-custom pt-40 pb-32">
+          <p className="text-body-large">Loading...</p>
         </div>
+        <Footer />
       </div>
     );
   }
 
+  if (!project) {
+    return <NotFound />;
+  }
+
+  const currentIndex = projects.findIndex((p) => p.id === id);
+  const prevProject = currentIndex > 0 ? projects[currentIndex - 1] : null;
+  const nextProject =
+    currentIndex >= 0 && currentIndex < projects.length - 1
+      ? projects[currentIndex + 1]
+      : null;
+
+  const detailLines = project.details ?? [];
+
+  const specs = [
+    { label: "Location", value: project.location },
+    { label: "Year", value: project.year },
+    { label: "Category", value: project.category },
+    { label: "Material", value: project.material },
+    { label: "Area", value: project.area },
+    { label: "Status", value: project.status },
+  ].filter((s) => !!s.value);
+
   return (
     <div className="min-h-screen bg-background">
-      <Navigation transparent />
+      <Navigation />
 
-      {/* Hero Section with Parallax */}
-      <section className="relative h-[100vh] w-full overflow-hidden">
-        <div 
-          className="absolute inset-0 w-full h-[120%]"
-          style={{ transform: `translateY(-${parallaxOffset}px)` }}
+      {/* Hero */}
+      <section className="relative h-screen overflow-hidden">
+        <div
+          className="absolute inset-0 w-full h-full"
+          style={{ transform: `translateY(${parallaxOffset}px)` }}
         >
           <img
             src={project.image}
             alt={project.title}
-            className={`w-full h-full object-cover transition-all duration-1000 ${
-              isLoaded ? "scale-100 opacity-100" : "scale-110 opacity-0"
-            }`}
+            className="w-full h-full object-cover"
           />
         </div>
-        
-        {/* Gradient overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/10" />
-        
-        {/* Hero Content */}
-        <div className="absolute inset-0 flex flex-col justify-end pb-20 md:pb-32">
+
+        <div className="absolute inset-0 bg-black/40" />
+
+        <div className="relative h-full flex items-end pb-20">
           <div className="container-custom">
-            <div className={`transition-all duration-1000 delay-300 ${
-              isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
-            }`}>
-              <div className="flex flex-wrap gap-3 mb-6">
-                <span className="text-primary-foreground/70 text-xs uppercase tracking-[0.25em] px-3 py-1 border border-primary-foreground/20 backdrop-blur-sm">
-                  {project.category}
-                </span>
-                <span className="text-primary-foreground/70 text-xs uppercase tracking-[0.25em] px-3 py-1 border border-primary-foreground/20 backdrop-blur-sm">
-                  {project.year}
-                </span>
-                <span className="text-primary-foreground/70 text-xs uppercase tracking-[0.25em] px-3 py-1 border border-primary-foreground/20 backdrop-blur-sm">
-                  {project.location}
-                </span>
-              </div>
-              
-              <h1 className="font-serif text-4xl md:text-6xl lg:text-7xl xl:text-8xl text-primary-foreground font-light tracking-wide mb-4">
-                {project.title}
-              </h1>
-              
-              <p className="text-primary-foreground/80 text-lg md:text-xl font-light max-w-2xl">
+            <Link
+              to="/projects"
+              className="inline-flex items-center gap-2 text-primary-foreground/90 hover:text-primary-foreground transition-colors mb-10"
+            >
+              <ArrowLeft size={18} />
+              <span className="text-caption">Back to Projects</span>
+            </Link>
+
+            <h1 className="text-display text-primary-foreground mb-4">
+              {project.title}
+            </h1>
+            {project.subtitle ? (
+              <p className="text-subheading text-primary-foreground/90 mb-6">
                 {project.subtitle}
               </p>
+            ) : null}
+
+            <div className="flex flex-wrap gap-3">
+              {project.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="text-xs px-3 py-1 border border-primary-foreground/40 rounded-full text-primary-foreground/90"
+                >
+                  {tag}
+                </span>
+              ))}
             </div>
           </div>
         </div>
-
-        {/* Scroll indicator */}
-        <div className={`absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-primary-foreground/50 transition-all duration-1000 delay-700 ${
-          isLoaded ? "opacity-100" : "opacity-0"
-        }`}>
-          <span className="text-xs uppercase tracking-[0.2em]">Explore</span>
-          <div className="w-px h-12 bg-gradient-to-b from-primary-foreground/50 to-transparent animate-pulse" />
-        </div>
       </section>
 
-      {/* Project Info Section */}
-      <section className="py-24 md:py-32 bg-background">
+      {/* Content */}
+      <section className="py-24">
         <div className="container-custom">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
-            {/* Main Description */}
-            <div className="lg:col-span-2 space-y-8">
-              <p className="text-heading text-foreground/90 leading-relaxed">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
+            {/* Description */}
+            <div className="lg:col-span-8 space-y-10">
+              <p className="text-body-large text-foreground/90 leading-relaxed">
                 {project.description}
               </p>
-              
-              <div className="space-y-6 pt-8">
-                {project.details.map((detail, index) => (
-                  <p key={index} className="text-body-large border-l-2 border-border pl-6">
-                    {detail}
-                  </p>
-                ))}
-              </div>
+
+              {detailLines.length > 0 ? (
+                <div className="space-y-6 pt-8">
+                  {detailLines.map((line, index) => (
+                    <p
+                      key={index}
+                      className="text-body-large border-l-2 border-border pl-6"
+                    >
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
-            {/* Project Specs */}
-            <div className="space-y-8">
+            {/* Specs */}
+            <div className="lg:col-span-4 space-y-8">
               <div className="space-y-6">
-                {[
-                  { label: "Location", value: project.location },
-                  { label: "Year", value: project.year },
-                  { label: "Category", value: project.category },
-                  { label: "Material", value: project.material },
-                  { label: "Area", value: project.area },
-                  { label: "Status", value: project.status },
-                ].map((spec, index) => (
+                {specs.map((spec, index) => (
                   <div key={index} className="border-b border-border pb-4">
-                    <span className="text-caption block mb-1">{spec.label}</span>
-                    <span className="text-lg font-serif">{spec.value}</span>
+                    <span className="text-caption block mb-1">
+                      {spec.label}
+                    </span>
+                    <span className="text-body-large text-foreground/90">
+                      {spec.value}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* Navigation to other projects */}
-      <section className="py-16 bg-muted">
-        <div className="container-custom">
-          <div className="grid grid-cols-2 gap-8">
+          {/* Prev / Next */}
+          <div className="flex items-center justify-between mt-20 pt-12 border-t border-border">
             {prevProject ? (
               <Link
                 to={`/project/${prevProject.id}`}
-                className="group flex items-center gap-4 hover:opacity-70 transition-opacity"
+                className="group inline-flex items-center gap-3"
               >
-                <ArrowLeft className="w-6 h-6 group-hover:-translate-x-2 transition-transform" />
+                <ArrowLeft
+                  size={18}
+                  className="text-muted-foreground group-hover:text-foreground transition-colors"
+                />
                 <div>
-                  <span className="text-caption block mb-1">Previous</span>
-                  <span className="font-serif text-lg">{prevProject.title}</span>
+                  <p className="text-caption">Previous</p>
+                  <p className="text-body-large group-hover:underline">
+                    {prevProject.title}
+                  </p>
                 </div>
               </Link>
             ) : (
               <div />
             )}
-            
+
             {nextProject ? (
               <Link
                 to={`/project/${nextProject.id}`}
-                className="group flex items-center gap-4 justify-end text-right hover:opacity-70 transition-opacity"
+                className="group inline-flex items-center gap-3 text-right"
               >
                 <div>
-                  <span className="text-caption block mb-1">Next</span>
-                  <span className="font-serif text-lg">{nextProject.title}</span>
+                  <p className="text-caption">Next</p>
+                  <p className="text-body-large group-hover:underline">
+                    {nextProject.title}
+                  </p>
                 </div>
-                <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
+                <ArrowRight
+                  size={18}
+                  className="text-muted-foreground group-hover:text-foreground transition-colors"
+                />
               </Link>
             ) : (
               <div />

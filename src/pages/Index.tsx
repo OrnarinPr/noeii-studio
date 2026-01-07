@@ -3,98 +3,79 @@ import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { useEffect, useRef, useState } from "react";
 import { ArrowDown } from "lucide-react";
-
-import slide1 from "@/assets/slides/slide-1.jpg";
-import slide2 from "@/assets/slides/slide-2.jpg";
-import slide3 from "@/assets/slides/slide-3.jpg";
-import slide4 from "@/assets/slides/slide-4.jpg";
-
-const projects = [
-  {
-    id: "1",
-    image: slide1,
-    title: "NASU RETREAT",
-    subtitle: "雄大な自然に浮かびあがる鉄の彫刻",
-    tags: ["Nasu", "2024", "Hotel", "Corten Steel"],
-  },
-  {
-    id: "2",
-    image: slide2,
-    title: "MOUNTAIN VIEW HOUSE",
-    subtitle: "草原の風景と思考の家",
-    tags: ["Kyoto", "2023", "Residence", "Concrete"],
-  },
-  {
-    id: "3",
-    image: slide3,
-    title: "FLOATING PAVILION",
-    subtitle: "開かれた別荘",
-    tags: ["Osaka", "2023", "Villa", "Water"],
-  },
-  {
-    id: "4",
-    image: slide4,
-    title: "FOREST HOTEL",
-    subtitle: "Times of coexistence",
-    tags: ["Tokyo", "2022", "Hotel", "Interior"],
-  },
-];
+import { useQuery } from "@tanstack/react-query";
+import { listProjects } from "@/services/projects";
 
 const Index = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isLoaded, setIsLoaded] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects"],
+    queryFn: listProjects,
+  });
+
+  // Keep home sections limited (same idea as before: 4 hero projects)
+  const homeProjects = projects.slice(0, 4);
 
   useEffect(() => {
     setIsLoaded(true);
 
     const handleScroll = () => {
-      if (!containerRef.current) return;
-      const sections = containerRef.current.querySelectorAll('.project-section');
-      
+      const sections = document.querySelectorAll(".project-section");
+      const scrollPosition = window.scrollY + window.innerHeight / 2;
+
       sections.forEach((section, index) => {
         const rect = section.getBoundingClientRect();
-        if (rect.top <= window.innerHeight / 2 && rect.bottom >= window.innerHeight / 2) {
+        const top = rect.top + window.scrollY;
+        const bottom = top + rect.height;
+
+        if (scrollPosition >= top && scrollPosition < bottom) {
           setActiveIndex(index);
         }
       });
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    const handleMouseMove = (e: MouseEvent) => {
+      const x = (e.clientX - window.innerWidth / 2) / 50;
+      const y = (e.clientY - window.innerHeight / 2) / 50;
+      setMousePosition({ x, y });
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("mousemove", handleMouseMove);
+    };
   }, []);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const { clientX, clientY } = e;
-    const { innerWidth, innerHeight } = window;
-    setMousePosition({
-      x: (clientX / innerWidth - 0.5) * 20,
-      y: (clientY / innerHeight - 0.5) * 20,
-    });
+  const scrollToNext = () => {
+    const nextIndex = Math.min(activeIndex + 1, homeProjects.length - 1);
+    const section = document.querySelector(`[data-index="${nextIndex}"]`);
+    section?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
-    <div 
-      ref={containerRef}
-      className="min-h-screen bg-background"
-      onMouseMove={handleMouseMove}
-    >
-      <Navigation transparent />
+    <div ref={containerRef} className="min-h-screen bg-background overflow-x-hidden">
+      <Navigation />
 
-      {/* Progress indicator */}
+      {/* Side project nav */}
       <div className="fixed right-8 top-1/2 -translate-y-1/2 z-40 hidden lg:flex flex-col gap-3">
-        {projects.map((_, index) => (
+        {homeProjects.map((_, index) => (
           <button
             key={index}
             onClick={() => {
               const section = document.querySelector(`[data-index="${index}"]`);
-              section?.scrollIntoView({ behavior: 'smooth' });
+              section?.scrollIntoView({ behavior: "smooth" });
             }}
             className={`w-1 transition-all duration-500 rounded-full ${
-              activeIndex === index 
-                ? 'h-12 bg-primary-foreground' 
-                : 'h-3 bg-primary-foreground/30 hover:bg-primary-foreground/50'
+              activeIndex === index
+                ? "h-12 bg-primary-foreground"
+                : "h-3 bg-primary-foreground/30 hover:bg-primary-foreground/50"
             }`}
             aria-label={`Go to project ${index + 1}`}
           />
@@ -104,22 +85,37 @@ const Index = () => {
       {/* Project counter */}
       <div className="fixed left-8 bottom-8 z-40 hidden lg:block">
         <div className="flex items-baseline gap-1 text-primary-foreground mix-blend-difference">
-          <span className="text-4xl font-serif font-light">{String(activeIndex + 1).padStart(2, '0')}</span>
-          <span className="text-sm opacity-50">/</span>
-          <span className="text-sm opacity-50">{String(projects.length).padStart(2, '0')}</span>
+          <span className="font-serif text-5xl">{String(activeIndex + 1).padStart(2, "0")}</span>
+          <span className="text-sm opacity-70">/ {String(homeProjects.length).padStart(2, "0")}</span>
         </div>
       </div>
-      
-      {/* Full-screen vertical scroll projects */}
-      {projects.map((project, index) => (
-        <section 
+
+      {/* Scroll indicator */}
+      <button
+        onClick={scrollToNext}
+        className="fixed left-1/2 bottom-10 -translate-x-1/2 z-40 hidden lg:flex flex-col items-center gap-3 text-primary-foreground/80 hover:text-primary-foreground transition-colors"
+      >
+        <span className="text-caption">Scroll</span>
+        <ArrowDown className="animate-bounce" size={18} />
+      </button>
+
+      {/* If no projects yet */}
+      {homeProjects.length === 0 ? (
+        <div className="container-custom pt-40 pb-32">
+          <p className="text-body-large">No projects found.</p>
+        </div>
+      ) : null}
+
+      {/* Sections */}
+      {homeProjects.map((project, index) => (
+        <section
           key={project.id}
           data-index={index}
           className="project-section relative h-screen w-full overflow-hidden snap-start"
-          style={{ scrollSnapAlign: 'start' }}
+          style={{ scrollSnapAlign: "start" }}
         >
           {/* Background Image with Parallax */}
-          <div 
+          <div
             className="absolute inset-0 w-full h-full transition-transform duration-100 ease-out"
             style={{
               transform: `translate(${mousePosition.x * 0.5}px, ${mousePosition.y * 0.5}px) scale(1.1)`,
@@ -129,112 +125,79 @@ const Index = () => {
               src={project.image}
               alt={project.title}
               className={`w-full h-full object-cover transition-all duration-1000 ${
-                isLoaded ? 'scale-100 opacity-100' : 'scale-110 opacity-0'
+                isLoaded ? "scale-100 opacity-100" : "scale-110 opacity-0"
               }`}
               style={{ transitionDelay: `${index * 100}ms` }}
             />
           </div>
-          
-          {/* Cinematic gradient overlays */}
+
+          {/* Overlays */}
           <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
-          
-          {/* Animated grain effect */}
-          <div 
-            className="absolute inset-0 opacity-[0.03] pointer-events-none"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-            }}
-          />
-          
-          {/* Content */}
-          <div className="absolute inset-0 flex flex-col justify-end pb-20 md:pb-28">
+
+          <div className="relative h-full flex items-center">
             <div className="container-custom">
-              {/* Tags with stagger animation */}
-              <div className={`flex flex-wrap gap-2 mb-6 transition-all duration-700 ${
-                activeIndex === index ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-              }`}>
-                <span className="text-primary-foreground/60 text-xs uppercase tracking-[0.25em]">Works</span>
-                {project.tags.map((tag, i) => (
-                  <span 
-                    key={i} 
-                    className="text-primary-foreground/60 text-xs tracking-wide"
-                    style={{ transitionDelay: `${i * 50}ms` }}
+              <div className="max-w-3xl">
+                <p className="text-caption text-primary-foreground/80 mb-6">
+                  {project.category} • {project.location} • {project.year}
+                </p>
+
+                <Link to={`/project/${project.id}`} className="group inline-block">
+                  <h2
+                    className={`font-serif text-4xl md:text-6xl lg:text-7xl xl:text-8xl text-primary-foreground 
+                    font-light tracking-wide leading-[1.1] transition-transform duration-500 group-hover:translate-x-2`}
                   >
-                    + {tag}
-                  </span>
-                ))}
-              </div>
-
-              {/* Subtitle */}
-              <p className={`text-primary-foreground/80 text-base md:text-lg mb-3 font-light transition-all duration-700 delay-100 ${
-                activeIndex === index ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-              }`}>
-                {project.subtitle}
-              </p>
-
-              {/* Title with hover effect */}
-              <Link 
-                to={`/project/${project.id}`} 
-                className="group inline-block"
-              >
-                <h2 className={`font-serif text-4xl md:text-6xl lg:text-7xl xl:text-8xl text-primary-foreground font-light tracking-wide transition-all duration-700 delay-150 ${
-                  activeIndex === index ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}>
-                  <span className="inline-block transition-transform duration-500 group-hover:translate-x-4">
                     {project.title}
-                  </span>
-                  <span className="inline-block ml-6 opacity-0 group-hover:opacity-100 transition-all duration-500 -translate-x-4 group-hover:translate-x-0">
-                    →
-                  </span>
-                </h2>
-              </Link>
+                  </h2>
+                </Link>
 
-              {/* View project link */}
-              <Link
-                to={`/project/${project.id}`}
-                className={`inline-flex items-center gap-3 mt-8 text-primary-foreground/70 text-xs uppercase tracking-[0.25em] hover:text-primary-foreground transition-all duration-700 delay-200 group ${
-                  activeIndex === index ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-              >
-                <span className="relative overflow-hidden">
-                  <span className="inline-block group-hover:-translate-y-full transition-transform duration-300">View Project</span>
-                  <span className="absolute top-full left-0 inline-block group-hover:-translate-y-full transition-transform duration-300">View Project</span>
-                </span>
-                <span className="w-8 h-px bg-primary-foreground/50 group-hover:w-12 transition-all duration-300" />
-              </Link>
+                {project.subtitle ? (
+                  <p className="text-subheading text-primary-foreground/90 mt-6">
+                    {project.subtitle}
+                  </p>
+                ) : null}
+
+                <div className="flex flex-wrap gap-3 mt-8">
+                  {project.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="text-xs px-3 py-1 border border-primary-foreground/40 rounded-full text-primary-foreground/90"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-12">
+                  <Link
+                    to={`/project/${project.id}`}
+                    className="text-caption link-underline text-primary-foreground"
+                  >
+                    View Project
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
-
-          {/* Scroll indicator for first slide */}
-          {index === 0 && (
-            <div className={`absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 text-primary-foreground/60 transition-all duration-1000 delay-1000 ${
-              isLoaded ? 'opacity-100' : 'opacity-0'
-            }`}>
-              <span className="text-xs uppercase tracking-[0.25em]">Scroll</span>
-              <ArrowDown className="w-4 h-4 animate-bounce" />
-            </div>
-          )}
         </section>
       ))}
 
-      {/* Philosophy section */}
-      <section className="py-40 md:py-56 bg-background relative overflow-hidden">
-        {/* Subtle background pattern */}
-        <div className="absolute inset-0 opacity-[0.02]">
-          <div className="absolute top-0 left-1/4 w-px h-full bg-foreground" />
-          <div className="absolute top-0 left-1/2 w-px h-full bg-foreground" />
-          <div className="absolute top-0 left-3/4 w-px h-full bg-foreground" />
-        </div>
-        
-        <div className="container-custom relative">
-          <div className="max-w-4xl mx-auto text-center">
-            <p className="text-3xl md:text-4xl lg:text-5xl font-serif leading-relaxed text-foreground/90 mb-16">
-              "We believe in the power of empty space. In architecture, what you leave out is just as important as what you put in."
+      {/* About CTA */}
+      <section className="py-32 bg-background">
+        <div className="container-custom">
+          <div className="max-w-3xl mx-auto text-center">
+            <p className="text-caption mb-4">NOEII ARCH STUDIO</p>
+            <h2 className="text-heading mb-6">
+              Minimal spaces with timeless elegance.
+            </h2>
+            <p className="text-body-large mb-10">
+              We craft architecture, interiors, and visual identity through light,
+              material, and quiet proportions.
             </p>
+
             <Link
               to="/about"
-              className="inline-flex items-center gap-4 text-sm uppercase tracking-[0.25em] text-muted-foreground hover:text-foreground transition-colors group"
+              className="inline-flex items-center gap-4 text-caption group"
             >
               <span>About Our Philosophy</span>
               <span className="w-12 h-px bg-current group-hover:w-20 transition-all duration-300" />
