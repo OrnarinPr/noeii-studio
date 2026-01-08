@@ -18,6 +18,8 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminProjects from "./pages/admin/AdminProjects";
 import AdminProducts from "./pages/admin/AdminProducts";
+import AdminLogin from "./pages/admin/AdminLogin";
+import RequireAdmin from "./pages/admin/RequireAdmin";
 
 const queryClient = new QueryClient();
 
@@ -36,11 +38,16 @@ const App = () => (
           <Route path="/staff" element={<Staff />} />
           <Route path="/shop" element={<Shop />} />
 
-          {/* Admin */}
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<AdminDashboard />} />
-            <Route path="projects" element={<AdminProjects />} />
-            <Route path="products" element={<AdminProducts />} />
+          {/* Admin - login is public */}
+          <Route path="/admin/login" element={<AdminLogin />} />
+
+          {/* Admin - protected */}
+          <Route path="/admin" element={<RequireAdmin />}>
+            <Route element={<AdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="projects" element={<AdminProjects />} />
+              <Route path="products" element={<AdminProducts />} />
+            </Route>
           </Route>
 
           {/* 404 */}

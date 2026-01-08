@@ -1,11 +1,26 @@
-import { Outlet, NavLink } from "react-router-dom";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { adminLogout } from "@/services/adminAuth";
 
 const AdminLayout = () => {
+  const navigate = useNavigate();
+
+  const onLogout = () => {
+    adminLogout();
+    navigate("/admin/login", { replace: true });
+  };
+
   return (
     <div className="min-h-screen flex bg-background">
-      {/* Sidebar */}
       <aside className="w-64 border-r border-border p-6">
-        <h1 className="font-serif text-xl mb-10">NOEII Admin</h1>
+        <div className="flex items-start justify-between gap-3 mb-10">
+          <h1 className="font-serif text-xl">NOEII Admin</h1>
+          <button
+            onClick={onLogout}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Logout
+          </button>
+        </div>
 
         <nav className="space-y-4">
           <NavLink
@@ -38,7 +53,6 @@ const AdminLayout = () => {
         </nav>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 p-10">
         <Outlet />
       </main>
