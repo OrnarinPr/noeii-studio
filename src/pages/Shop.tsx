@@ -33,6 +33,21 @@ const PRODUCT_CATEGORIES: Exclude<Category, "All">[] = [
   "Storage",
 ];
 
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.onload = () => resolve(String(reader.result));
+    reader.readAsDataURL(file);
+  });
+}
+
+function isAllowedImage(file: File) {
+  const okType = ["image/png", "image/jpeg", "image/webp"].includes(file.type);
+  const okSize = file.size <= 1.5 * 1024 * 1024; // 1.5MB
+  return { okType, okSize };
+}
+
 const Shop = () => {
   const queryClient = useQueryClient();
   const { isAdmin, editMode } = useAdmin();
@@ -97,7 +112,7 @@ const Shop = () => {
     if (!draft.image.trim()) {
       toast({
         title: "Missing image",
-        description: "Please enter image URL or keep default.",
+        description: "Please upload an image or paste an image URL.",
         variant: "destructive",
       });
       return;
@@ -257,8 +272,8 @@ const Shop = () => {
               <h2 className="text-heading mb-6">Custom Commissions</h2>
               <p className="text-base text-muted-foreground mb-8 leading-relaxed">
                 Beyond our standard collection, we accept commissions for custom
-                furniture and objects. Our process is collaborative—working
-                closely with clients to create pieces that perfectly suit their space.
+                furniture and objects. Our process is collaborative—working closely
+                with clients to create pieces that perfectly suit their space.
               </p>
               <div className="space-y-2">
                 <p className="text-base">shop@noeii-arch.jp</p>
@@ -291,7 +306,9 @@ const Shop = () => {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="font-serif text-xl">
-                  {products.some((p) => p.id === draft.id) ? "Edit Product" : "New Product"}
+                  {products.some((p) => p.id === draft.id)
+                    ? "Edit Product"
+                    : "New Product"}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
                   Update fields and save.
@@ -337,16 +354,85 @@ const Shop = () => {
                 </select>
               </div>
 
+              {/* Image Upload + URL */}
               <div>
-                <div className="text-caption mb-2">Image URL</div>
-                <input
-                  value={draft.image}
-                  onChange={(e) => setDraft({ ...draft, image: e.target.value })}
-                  className="w-full border border-border bg-background px-4 py-3 outline-none"
-                  placeholder="https://..."
-                />
-                <div className="text-xs text-muted-foreground mt-2">
-                  For now use a URL or keep existing. Later we will add upload.
+                <div className="text-caption mb-2">Image</div>
+
+                {/* Preview */}
+                <div className="mb-3 aspect-[4/3] overflow-hidden border border-border bg-muted">
+                  {draft.image ? (
+                    <img
+                      src={draft.image}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : null}
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      const { okType, okSize } = isAllowedImage(file);
+
+                      if (!okType) {
+                        toast({
+                          title: "Unsupported file type",
+                          description: "Please upload PNG, JPG, or WEBP.",
+                          variant: "destructive",
+                        });
+                        e.currentTarget.value = "";
+                        return;
+                      }
+
+                      if (!okSize) {
+                        toast({
+                          title: "File too large",
+                          description: "Please use an image <= 1.5MB for now.",
+                          variant: "destructive",
+                        });
+                        e.currentTarget.value = "";
+                        return;
+                      }
+
+                      try {
+                        const dataUrl = await fileToDataUrl(file);
+                        setDraft({ ...draft, image: dataUrl });
+                        toast({ title: "Uploaded", description: "Image updated." });
+                      } catch {
+                        toast({
+                          title: "Upload failed",
+                          description: "Could not read the file.",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        e.currentTarget.value = "";
+                      }
+                    }}
+                    className="block w-full text-sm"
+                  />
+
+                  <div className="text-xs text-muted-foreground">
+                    Local upload (saved in browser). Later we can switch to real
+                    storage (Supabase) for production.
+                  </div>
+
+                  <div className="pt-2">
+                    <div className="text-caption mb-2">Or paste image URL</div>
+                    <input
+                      value={draft.image}
+                      onChange={(e) =>
+                        setDraft({ ...draft, image: e.target.value })
+                      }
+                      className="w-full border border-border bg-background px-4 py-3 outline-none"
+                      placeholder="https://..."
+                    />
+                  </div>
                 </div>
               </div>
 
