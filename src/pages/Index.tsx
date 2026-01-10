@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { listProjects } from "@/services/projects";
@@ -12,19 +12,30 @@ const Index = () => {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const { data: projects = [] } = useQuery({
+  const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: listProjects,
   });
 
-  // Keep home sections limited (same idea as before: 4 hero projects)
-  const homeProjects = projects.slice(0, 4);
+  // Keep home sections limited (4 hero projects max)
+  const homeProjects = useMemo(() => projects.slice(0, 4), [projects]);
+
+  // Keep activeIndex valid when data changes (e.g., less than 4 projects)
+  useEffect(() => {
+    if (homeProjects.length === 0) {
+      setActiveIndex(0);
+      return;
+    }
+    setActiveIndex((prev) => Math.min(prev, homeProjects.length - 1));
+  }, [homeProjects.length]);
 
   useEffect(() => {
     setIsLoaded(true);
 
     const handleScroll = () => {
-      const sections = document.querySelectorAll(".project-section");
+      const sections = document.querySelectorAll<HTMLElement>(".project-section");
+      if (!sections.length) return;
+
       const scrollPosition = window.scrollY + window.innerHeight / 2;
 
       sections.forEach((section, index) => {
@@ -47,16 +58,24 @@ const Index = () => {
     window.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("mousemove", handleMouseMove, { passive: true });
 
+    // initial compute
+    handleScroll();
+
     return () => {
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("mousemove", handleMouseMove);
     };
   }, []);
 
-  const scrollToNext = () => {
-    const nextIndex = Math.min(activeIndex + 1, homeProjects.length - 1);
-    const section = document.querySelector(`[data-index="${nextIndex}"]`);
+  const scrollToIndex = (index: number) => {
+    const section = document.querySelector<HTMLElement>(`[data-index="${index}"]`);
     section?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const scrollToNext = () => {
+    if (homeProjects.length === 0) return;
+    const nextIndex = Math.min(activeIndex + 1, homeProjects.length - 1);
+    scrollToIndex(nextIndex);
   };
 
   return (
@@ -64,45 +83,61 @@ const Index = () => {
       <Navigation />
 
       {/* Side project nav */}
-      <div className="fixed right-8 top-1/2 -translate-y-1/2 z-40 hidden lg:flex flex-col gap-3">
-        {homeProjects.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => {
-              const section = document.querySelector(`[data-index="${index}"]`);
-              section?.scrollIntoView({ behavior: "smooth" });
-            }}
-            className={`w-1 transition-all duration-500 rounded-full ${
-              activeIndex === index
-                ? "h-12 bg-primary-foreground"
-                : "h-3 bg-primary-foreground/30 hover:bg-primary-foreground/50"
-            }`}
-            aria-label={`Go to project ${index + 1}`}
-          />
-        ))}
-      </div>
+      {homeProjects.length > 0 ? (
+        <div className="fixed right-8 top-1/2 -translate-y-1/2 z-40 hidden lg:flex flex-col gap-3">
+          {homeProjects.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => scrollToIndex(index)}
+              className={`w-1 transition-all duration-500 rounded-full ${
+                activeIndex === index
+                  ? "h-12 bg-primary-foreground"
+                  : "h-3 bg-primary-foreground/30 hover:bg-primary-foreground/50"
+              }`}
+              aria-label={`Go to project ${index + 1}`}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {/* Project counter */}
-      <div className="fixed left-8 bottom-8 z-40 hidden lg:block">
-        <div className="flex items-baseline gap-1 text-primary-foreground mix-blend-difference">
-          <span className="font-serif text-5xl">{String(activeIndex + 1).padStart(2, "0")}</span>
-          <span className="text-sm opacity-70">/ {String(homeProjects.length).padStart(2, "0")}</span>
+      {homeProjects.length > 0 ? (
+        <div className="fixed left-8 bottom-8 z-40 hidden lg:block">
+          <div className="flex items-baseline gap-1 text-primary-foreground mix-blend-difference">
+            <span className="font-serif text-5xl">
+              {String(activeIndex + 1).padStart(2, "0")}
+            </span>
+            <span className="text-sm opacity-70">
+              / {String(homeProjects.length).padStart(2, "0")}
+            </span>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {/* Scroll indicator */}
-      <button
-        onClick={scrollToNext}
-        className="fixed left-1/2 bottom-10 -translate-x-1/2 z-40 hidden lg:flex flex-col items-center gap-3 text-primary-foreground/80 hover:text-primary-foreground transition-colors"
-      >
-        <span className="text-caption">Scroll</span>
-        <ArrowDown className="animate-bounce" size={18} />
-      </button>
+      {homeProjects.length > 0 ? (
+        <button
+          onClick={scrollToNext}
+          className="fixed left-1/2 bottom-10 -translate-x-1/2 z-40 hidden lg:flex flex-col items-center gap-3 text-primary-foreground/80 hover:text-primary-foreground transition-colors"
+        >
+          <span className="text-caption">Scroll</span>
+          <ArrowDown className="animate-bounce" size={18} />
+        </button>
+      ) : null}
 
-      {/* If no projects yet */}
-      {homeProjects.length === 0 ? (
+      {/* Loading / Empty state */}
+      {isLoading ? (
+        <div className="container-custom pt-40 pb-32">
+          <p className="text-body-large">Loading...</p>
+        </div>
+      ) : homeProjects.length === 0 ? (
         <div className="container-custom pt-40 pb-32">
           <p className="text-body-large">No projects found.</p>
+          <div className="mt-6">
+            <Link to="/projects" className="text-caption link-underline">
+              Go to Projects
+            </Link>
+          </div>
         </div>
       ) : null}
 
@@ -128,6 +163,7 @@ const Index = () => {
                 isLoaded ? "scale-100 opacity-100" : "scale-110 opacity-0"
               }`}
               style={{ transitionDelay: `${index * 100}ms` }}
+              loading="lazy"
             />
           </div>
 
@@ -144,8 +180,7 @@ const Index = () => {
 
                 <Link to={`/project/${project.id}`} className="group inline-block">
                   <h2
-                    className={`font-serif text-4xl md:text-6xl lg:text-7xl xl:text-8xl text-primary-foreground 
-                    font-light tracking-wide leading-[1.1] transition-transform duration-500 group-hover:translate-x-2`}
+                    className="font-serif text-4xl md:text-6xl lg:text-7xl xl:text-8xl text-primary-foreground font-light tracking-wide leading-[1.1] transition-transform duration-500 group-hover:translate-x-2"
                   >
                     {project.title}
                   </h2>
@@ -157,16 +192,19 @@ const Index = () => {
                   </p>
                 ) : null}
 
-                <div className="flex flex-wrap gap-3 mt-8">
-                  {project.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="text-xs px-3 py-1 border border-primary-foreground/40 rounded-full text-primary-foreground/90"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
+                {/* tags safe */}
+                {Array.isArray(project.tags) && project.tags.length > 0 ? (
+                  <div className="flex flex-wrap gap-3 mt-8">
+                    {project.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="text-xs px-3 py-1 border border-primary-foreground/40 rounded-full text-primary-foreground/90"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
 
                 <div className="mt-12">
                   <Link
@@ -187,18 +225,13 @@ const Index = () => {
         <div className="container-custom">
           <div className="max-w-3xl mx-auto text-center">
             <p className="text-caption mb-4">NOEII ARCH STUDIO</p>
-            <h2 className="text-heading mb-6">
-              Minimal spaces with timeless elegance.
-            </h2>
+            <h2 className="text-heading mb-6">Minimal spaces with timeless elegance.</h2>
             <p className="text-body-large mb-10">
               We craft architecture, interiors, and visual identity through light,
               material, and quiet proportions.
             </p>
 
-            <Link
-              to="/about"
-              className="inline-flex items-center gap-4 text-caption group"
-            >
+            <Link to="/about" className="inline-flex items-center gap-4 text-caption group">
               <span>About Our Philosophy</span>
               <span className="w-12 h-px bg-current group-hover:w-20 transition-all duration-300" />
             </Link>

@@ -141,56 +141,74 @@ const Shop = () => {
       <AdminBar />
 
       {/* Hero */}
-      <section className="pt-32 pb-16 md:pt-40 md:pb-24 overflow-hidden">
+      <section className="pt-28 pb-10 md:pt-36 md:pb-16">
         <div className="container-custom">
-          <div className="flex items-start justify-between gap-6">
-            <div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-end">
+            <div className="lg:col-span-7">
               <h1 className="text-display mb-6 opacity-0 animate-fade-up">Shop</h1>
-              <p className="text-body-large max-w-xl opacity-0 animate-fade-up stagger-1">
-                A curated collection of furniture and objects designed by our studio.
-              </p>
             </div>
 
+            <div className="lg:col-span-5">
+              <p className="text-body-large opacity-0 animate-fade-up stagger-1 max-w-md lg:ml-auto">
+                A curated collection of furniture and objects designed by our studio.
+              </p>
+
+              {isAdmin && editMode ? (
+                <div className="mt-8 lg:mt-10">
+                  <button
+                    onClick={openCreate}
+                    className="hidden lg:inline-flex border-thin px-4 py-3 text-caption hover:bg-accent transition-colors"
+                  >
+                    + Add Product
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Categories */}
+          <div className="mt-10 border-t border-border/50 pt-6">
+            <div className="flex items-center justify-between gap-6">
+              <div className="flex gap-8 overflow-x-auto pb-2 scrollbar-hide max-w-full">
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`text-caption whitespace-nowrap transition-colors ${activeCategory === cat
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              {isAdmin && editMode ? (
+                <button
+                  onClick={openCreate}
+                  className="hidden md:inline-flex lg:hidden border-thin px-4 py-3 text-caption hover:bg-accent transition-colors"
+                >
+                  + Add Product
+                </button>
+              ) : null}
+            </div>
+
+            {/* Mobile add button */}
             {isAdmin && editMode ? (
-              <button
-                onClick={openCreate}
-                className="hidden md:inline-flex border-thin px-4 py-3 text-caption hover:bg-accent transition-colors"
-              >
-                + Add Product
-              </button>
+              <div className="mt-4 md:hidden">
+                <button
+                  onClick={openCreate}
+                  className="w-full border-thin px-4 py-3 text-caption hover:bg-accent transition-colors"
+                >
+                  + Add Product
+                </button>
+              </div>
             ) : null}
           </div>
         </div>
-
-        {/* Categories */}
-        <div className="mt-12 flex gap-8 overflow-x-auto pb-4 px-6 md:px-12 lg:px-16 scrollbar-hide">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`text-caption whitespace-nowrap transition-colors ${
-                activeCategory === cat
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {/* Mobile add button */}
-        {isAdmin && editMode ? (
-          <div className="mt-4 px-6 md:hidden">
-            <button
-              onClick={openCreate}
-              className="w-full border-thin px-4 py-3 text-caption hover:bg-accent transition-colors"
-            >
-              + Add Product
-            </button>
-          </div>
-        ) : null}
       </section>
+
 
       {/* Products */}
       <section className="pb-24">

@@ -1,81 +1,311 @@
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
+import AdminBar from "@/components/AdminBar";
+
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { listProjects } from "@/services/projects";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { useAdmin } from "@/context/AdminContext";
+import type { Project, ProjectCategory } from "@/data/projects";
+import {
+  createNewProjectId,
+  deleteProject,
+  listProjects,
+  upsertProject,
+} from "@/services/projects";
+import { toast } from "@/components/ui/use-toast";
+
+type CategoryFilter = "All" | ProjectCategory;
+
+const CATEGORIES: CategoryFilter[] = [
+  "All",
+  "Residence",
+  "Villa",
+  "Hotel",
+  "Gallery",
+  "Office",
+  "Cultural",
+  "Commercial",
+  "Public",
+];
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.onload = () => resolve(String(reader.result));
+    reader.readAsDataURL(file);
+  });
+}
+
+function isAllowedImage(file: File) {
+  const okType = ["image/png", "image/jpeg", "image/webp"].includes(file.type);
+  const okSize = file.size <= 1.5 * 1024 * 1024; // 1.5MB
+  return { okType, okSize };
+}
 
 const Projects = () => {
-  const { data: projects = [] } = useQuery({
+  const queryClient = useQueryClient();
+  const { isAdmin, editMode } = useAdmin();
+
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>("All");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [draft, setDraft] = useState<Project | null>(null);
+
+  const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: listProjects,
   });
 
+  const filteredProjects = useMemo(() => {
+    if (activeCategory === "All") return projects;
+    return projects.filter((p) => p.category === activeCategory);
+  }, [projects, activeCategory]);
+
+  const openCreate = () => {
+    const next: Project = {
+      id: createNewProjectId(),
+      image: projects[0]?.image ?? "",
+      title: "",
+      subtitle: "",
+      location: "",
+      year: "",
+      category: "Residence",
+      material: "",
+      description: "",
+      details: ["", "", ""],
+      area: "",
+      status: "Completed",
+      tags: [],
+    };
+    setDraft(next);
+    setEditorOpen(true);
+  };
+
+  const openEdit = (p: Project) => {
+    setDraft({ ...p, details: Array.isArray(p.details) ? p.details : [] });
+    setEditorOpen(true);
+  };
+
+  const closeEditor = () => {
+    setEditorOpen(false);
+    setDraft(null);
+  };
+
+  const onSave = async () => {
+    if (!draft) return;
+
+    if (!draft.title.trim()) {
+      toast({
+        title: "Missing title",
+        description: "Please enter project title.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!draft.image.trim()) {
+      toast({
+        title: "Missing image",
+        description: "Please upload an image or paste an image URL.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const cleaned: Project = {
+      ...draft,
+      details: (draft.details || []).map((d) => d.trim()).filter(Boolean),
+      tags: (draft.tags || []).map((t) => t.trim()).filter(Boolean),
+    };
+
+    await upsertProject(cleaned);
+    await queryClient.invalidateQueries({ queryKey: ["projects"] });
+
+    toast({ title: "Saved", description: "Project updated." });
+    closeEditor();
+  };
+
+  const onDelete = async (id: string) => {
+    const ok = window.confirm("Delete this project?");
+    if (!ok) return;
+
+    await deleteProject(id);
+    await queryClient.invalidateQueries({ queryKey: ["projects"] });
+
+    toast({ title: "Deleted", description: "Project removed." });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
+      <AdminBar />
 
       {/* Hero */}
-      <section className="pt-40 pb-20">
+      <section className="pt-28 pb-10 md:pt-36 md:pb-16">
         <div className="container-custom">
-          <h1 className="text-display mb-6">Selected Works</h1>
-          <p className="text-body-large max-w-2xl">
-            A curated selection of architecture and interior projects, exploring
-            minimal space, light, and material.
-          </p>
-        </div>
-      </section>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-end">
+            <div className="lg:col-span-7">
+              <h1 className="text-display mb-6 opacity-0 animate-fade-up">
+                Works
+              </h1>
+            </div>
 
-      {/* Project Grid */}
-      <section className="pb-32">
-        <div className="container-custom">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-            {projects.map((project) => (
-              <div key={project.id} className="group">
-                <div className="image-fade mb-6">
-                  <img
-                    src={project.coverImage}
-                    alt={project.title}
-                    className="w-full aspect-[4/3] object-cover"
-                  />
+            <div className="lg:col-span-5">
+              <p className="text-body-large opacity-0 animate-fade-up stagger-1 max-w-md lg:ml-auto">
+                A selection of architectural works spanning residential, commercial,
+                and cultural spaces.
+              </p>
+
+              {isAdmin && editMode ? (
+                <div className="mt-8 lg:mt-10">
+                  <button
+                    onClick={openCreate}
+                    className="hidden lg:inline-flex border-thin px-4 py-3 text-caption hover:bg-accent transition-colors"
+                  >
+                    + Add Project
+                  </button>
                 </div>
+              ) : null}
+            </div>
+          </div>
 
-                <div className="space-y-3">
-                  <p className="text-caption">
-                    {project.category} • {project.location} • {project.year}
-                  </p>
-
-                  <h2 className="text-subheading">{project.title}</h2>
-
-                  <p className="text-body-large">{project.description}</p>
-
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    {project.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="text-xs px-3 py-1 border-thin rounded-full"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="pt-4">
-                    <Link
-                      to={`/project/${project.id}`}
-                      className="text-caption link-underline"
-                    >
-                      View Project
-                    </Link>
-                  </div>
-                </div>
+          {/* Categories */}
+          <div className="mt-10 border-t border-border/50 pt-6">
+            <div className="flex items-center justify-between gap-6">
+              <div className="flex gap-8 overflow-x-auto pb-2 scrollbar-hide">
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`text-caption whitespace-nowrap transition-colors ${activeCategory === cat
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
               </div>
-            ))}
+
+              {isAdmin && editMode ? (
+                <button
+                  onClick={openCreate}
+                  className="hidden md:inline-flex lg:hidden border-thin px-4 py-3 text-caption hover:bg-accent transition-colors"
+                >
+                  + Add Project
+                </button>
+              ) : null}
+            </div>
+
+            {/* Mobile add button */}
+            {isAdmin && editMode ? (
+              <div className="mt-4 md:hidden">
+                <button
+                  onClick={openCreate}
+                  className="w-full border-thin px-4 py-3 text-caption hover:bg-accent transition-colors"
+                >
+                  + Add Project
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
 
-      {/* Contact CTA */}
-      <section className="pb-32">
+      {/* Projects list */}
+      <section className="pb-24">
+        {isLoading ? (
+          <div className="container-custom">
+            <p className="text-body-large">Loading...</p>
+          </div>
+        ) : (
+          <>
+            {filteredProjects.map((project, index) => (
+              <article
+                key={project.id}
+                className={`py-12 md:py-20 ${index % 2 === 0 ? "" : "bg-muted/30"}`}
+              >
+                <div className="container-custom">
+                  <div
+                    className={`grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center ${index % 2 === 1 ? "lg:flex-row-reverse" : ""
+                      }`}
+                  >
+                    {/* Image */}
+                    <div className={`${index % 2 === 1 ? "lg:order-2" : ""}`}>
+                      <div className="aspect-[4/5] overflow-hidden image-fade bg-muted">
+                        <img
+                          src={project.image}
+                          alt={project.title}
+                          className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
+                          loading="lazy"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className={`${index % 2 === 1 ? "lg:order-1" : ""}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-wrap gap-2 mb-6">
+                          <span className="text-muted-foreground text-xs uppercase tracking-[0.2em]">
+                            {project.category}
+                          </span>
+                          {(project.tags || []).slice(0, 4).map((tag, i) => (
+                            <span key={i} className="text-muted-foreground text-xs">
+                              + {tag}
+                            </span>
+                          ))}
+                        </div>
+
+                        {isAdmin && editMode ? (
+                          <div className="flex items-center gap-3 text-xs">
+                            <button
+                              onClick={() => openEdit(project)}
+                              className="text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => onDelete(project.id)}
+                              className="text-destructive"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <h2 className="text-heading mb-4">{project.title}</h2>
+
+                      <p className="text-caption mb-4">
+                        {project.location} — {project.year}
+                      </p>
+
+                      <p className="text-base text-muted-foreground leading-relaxed mb-8">
+                        {project.description}
+                      </p>
+
+                      <Link to={`/project/${project.id}`} className="text-caption link-underline">
+                        View Project
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+
+            {filteredProjects.length === 0 ? (
+              <div className="container-custom">
+                <p className="text-body-large">No projects in this category.</p>
+              </div>
+            ) : null}
+          </>
+        )}
+      </section>
+
+      {/* CTA */}
+      <section className="py-24 md:py-32 border-t border-border/50">
         <div className="container-custom text-center">
           <p className="text-heading mb-8">Interested in working together?</p>
           <Link to="/about" className="text-caption link-underline">
@@ -85,6 +315,272 @@ const Projects = () => {
       </section>
 
       <Footer />
+
+      {/* Editor Modal */}
+      {isAdmin && editMode && editorOpen && draft ? (
+        <div className="fixed inset-0 z-[70]">
+          <div className="absolute inset-0 bg-black/40" onClick={closeEditor} />
+
+          <div className="absolute left-1/2 top-1/2 w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 bg-background border border-border p-6 max-h-[86vh] overflow-auto">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="font-serif text-xl">
+                  {projects.some((p) => p.id === draft.id) ? "Edit Project" : "New Project"}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  Update fields and save.
+                </div>
+              </div>
+
+              <button
+                onClick={closeEditor}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-4">
+              <div>
+                <div className="text-caption mb-2">Title</div>
+                <input
+                  value={draft.title}
+                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                  className="w-full border border-border bg-background px-4 py-3 outline-none"
+                  placeholder="Project title"
+                />
+              </div>
+
+              <div>
+                <div className="text-caption mb-2">Subtitle</div>
+                <input
+                  value={draft.subtitle}
+                  onChange={(e) => setDraft({ ...draft, subtitle: e.target.value })}
+                  className="w-full border border-border bg-background px-4 py-3 outline-none"
+                  placeholder="Project subtitle"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-caption mb-2">Location</div>
+                  <input
+                    value={draft.location}
+                    onChange={(e) => setDraft({ ...draft, location: e.target.value })}
+                    className="w-full border border-border bg-background px-4 py-3 outline-none"
+                    placeholder="Tokyo, Japan"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-caption mb-2">Year</div>
+                  <input
+                    value={draft.year}
+                    onChange={(e) => setDraft({ ...draft, year: e.target.value })}
+                    className="w-full border border-border bg-background px-4 py-3 outline-none"
+                    placeholder="2026"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-caption mb-2">Category</div>
+                  <select
+                    value={draft.category}
+                    onChange={(e) =>
+                      setDraft({ ...draft, category: e.target.value as ProjectCategory })
+                    }
+                    className="w-full border border-border bg-background px-4 py-3 outline-none"
+                  >
+                    {CATEGORIES.filter((c) => c !== "All").map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <div className="text-caption mb-2">Status</div>
+                  <select
+                    value={draft.status}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        status: e.target.value as Project["status"],
+                      })
+                    }
+                    className="w-full border border-border bg-background px-4 py-3 outline-none"
+                  >
+                    <option value="Completed">Completed</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Concept">Concept</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-caption mb-2">Material</div>
+                  <input
+                    value={draft.material}
+                    onChange={(e) => setDraft({ ...draft, material: e.target.value })}
+                    className="w-full border border-border bg-background px-4 py-3 outline-none"
+                    placeholder="Concrete"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-caption mb-2">Area</div>
+                  <input
+                    value={draft.area}
+                    onChange={(e) => setDraft({ ...draft, area: e.target.value })}
+                    className="w-full border border-border bg-background px-4 py-3 outline-none"
+                    placeholder="520 m²"
+                  />
+                </div>
+              </div>
+
+              {/* Image Upload + URL */}
+              <div>
+                <div className="text-caption mb-2">Image</div>
+
+                <div className="mb-3 aspect-[4/3] overflow-hidden border border-border bg-muted">
+                  {draft.image ? (
+                    <img
+                      src={draft.image}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : null}
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      const { okType, okSize } = isAllowedImage(file);
+
+                      if (!okType) {
+                        toast({
+                          title: "Unsupported file type",
+                          description: "Please upload PNG, JPG, or WEBP.",
+                          variant: "destructive",
+                        });
+                        e.currentTarget.value = "";
+                        return;
+                      }
+
+                      if (!okSize) {
+                        toast({
+                          title: "File too large",
+                          description: "Please use an image <= 1.5MB for now.",
+                          variant: "destructive",
+                        });
+                        e.currentTarget.value = "";
+                        return;
+                      }
+
+                      try {
+                        const dataUrl = await fileToDataUrl(file);
+                        setDraft({ ...draft, image: dataUrl });
+                        toast({ title: "Uploaded", description: "Image updated." });
+                      } catch {
+                        toast({
+                          title: "Upload failed",
+                          description: "Could not read the file.",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        e.currentTarget.value = "";
+                      }
+                    }}
+                    className="block w-full text-sm"
+                  />
+
+                  <div className="text-xs text-muted-foreground">
+                    Local upload (saved in browser). Later we can switch to real storage (Supabase) for production.
+                  </div>
+
+                  <div className="pt-2">
+                    <div className="text-caption mb-2">Or paste image URL</div>
+                    <input
+                      value={draft.image}
+                      onChange={(e) => setDraft({ ...draft, image: e.target.value })}
+                      className="w-full border border-border bg-background px-4 py-3 outline-none"
+                      placeholder="https://..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-caption mb-2">Description</div>
+                <textarea
+                  value={draft.description}
+                  onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                  className="w-full min-h-[120px] border border-border bg-background px-4 py-3 outline-none"
+                  placeholder="Describe the project..."
+                />
+              </div>
+
+              <div>
+                <div className="text-caption mb-2">Details (one per line)</div>
+                <textarea
+                  value={(draft.details || []).join("\n")}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      details: e.target.value.split("\n"),
+                    })
+                  }
+                  className="w-full min-h-[140px] border border-border bg-background px-4 py-3 outline-none"
+                  placeholder="Detail line 1&#10;Detail line 2&#10;Detail line 3"
+                />
+              </div>
+
+              <div>
+                <div className="text-caption mb-2">Tags (comma separated)</div>
+                <input
+                  value={(draft.tags || []).join(", ")}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      tags: e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  className="w-full border border-border bg-background px-4 py-3 outline-none"
+                  placeholder="Tokyo, 2026, Hotel, Concrete"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={closeEditor}
+                className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onSave}
+                className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

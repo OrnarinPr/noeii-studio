@@ -4,11 +4,13 @@ import { Footer } from "@/components/Footer";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getProjectById, listProjects } from "@/services/projects";
-import NotFound from "./NotFound";
+
+import type { Project } from "@/data/projects";
+import { listProjects } from "@/services/projects";
 
 const ProjectDetail = () => {
   const { id } = useParams();
+  const [isLoaded, setIsLoaded] = useState(false);
   const [parallaxOffset, setParallaxOffset] = useState(0);
 
   const { data: projects = [] } = useQuery({
@@ -16,162 +18,146 @@ const ProjectDetail = () => {
     queryFn: listProjects,
   });
 
-  const { data: project } = useQuery({
-    queryKey: ["project", id],
-    queryFn: () => getProjectById(id ?? ""),
-    enabled: !!id,
-  });
+  const project: Project | undefined = projects.find((p) => p.id === id);
+  const currentIndex = projects.findIndex((p) => p.id === id);
+  const prevProject = currentIndex > 0 ? projects[currentIndex - 1] : null;
+  const nextProject = currentIndex < projects.length - 1 ? projects[currentIndex + 1] : null;
 
   useEffect(() => {
-    const handleScroll = () => setParallaxOffset(window.scrollY * 0.4);
+    setIsLoaded(true);
+    window.scrollTo(0, 0);
+
+    const handleScroll = () => setParallaxOffset(window.scrollY * 0.3);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [id]);
 
-  if (!id || project === undefined) {
-    // while query resolves (instant for static, but safe)
+  if (!project) {
     return (
-      <div className="min-h-screen bg-background">
-        <Navigation />
-        <div className="container-custom pt-40 pb-32">
-          <p className="text-body-large">Loading...</p>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-display mb-4">Project Not Found</h1>
+          <Link to="/projects" className="text-caption link-underline">
+            Back to Projects
+          </Link>
         </div>
-        <Footer />
       </div>
     );
   }
 
-  if (!project) {
-    return <NotFound />;
-  }
-
-  const currentIndex = projects.findIndex((p) => p.id === id);
-  const prevProject = currentIndex > 0 ? projects[currentIndex - 1] : null;
-  const nextProject =
-    currentIndex >= 0 && currentIndex < projects.length - 1
-      ? projects[currentIndex + 1]
-      : null;
-
-  const detailLines = project.details ?? [];
-
-  const specs = [
-    { label: "Location", value: project.location },
-    { label: "Year", value: project.year },
-    { label: "Category", value: project.category },
-    { label: "Material", value: project.material },
-    { label: "Area", value: project.area },
-    { label: "Status", value: project.status },
-  ].filter((s) => !!s.value);
-
   return (
     <div className="min-h-screen bg-background">
-      <Navigation />
+      <Navigation transparent />
 
-      {/* Hero */}
-      <section className="relative h-screen overflow-hidden">
+      {/* Hero Section with Parallax */}
+      <section className="relative h-[100vh] w-full overflow-hidden">
         <div
-          className="absolute inset-0 w-full h-full"
-          style={{ transform: `translateY(${parallaxOffset}px)` }}
+          className="absolute inset-0 w-full h-[120%]"
+          style={{ transform: `translateY(-${parallaxOffset}px)` }}
         >
           <img
             src={project.image}
             alt={project.title}
-            className="w-full h-full object-cover"
+            className={`w-full h-full object-cover transition-all duration-1000 ${
+              isLoaded ? "scale-100 opacity-100" : "scale-110 opacity-0"
+            }`}
           />
         </div>
 
-        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/10" />
 
-        <div className="relative h-full flex items-end pb-20">
+        <div className="absolute inset-0 flex flex-col justify-end pb-20 md:pb-32">
           <div className="container-custom">
-            <Link
-              to="/projects"
-              className="inline-flex items-center gap-2 text-primary-foreground/90 hover:text-primary-foreground transition-colors mb-10"
+            <div
+              className={`transition-all duration-1000 delay-300 ${
+                isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+              }`}
             >
-              <ArrowLeft size={18} />
-              <span className="text-caption">Back to Projects</span>
-            </Link>
+              <div className="flex flex-wrap gap-3 mb-6">
+                <span className="text-primary-foreground/70 text-xs uppercase tracking-[0.25em] px-3 py-1 border border-primary-foreground/20 backdrop-blur-sm">
+                  {project.category}
+                </span>
+                <span className="text-primary-foreground/70 text-xs uppercase tracking-[0.25em] px-3 py-1 border border-primary-foreground/20 backdrop-blur-sm">
+                  {project.year}
+                </span>
+                <span className="text-primary-foreground/70 text-xs uppercase tracking-[0.25em] px-3 py-1 border border-primary-foreground/20 backdrop-blur-sm">
+                  {project.location}
+                </span>
+              </div>
 
-            <h1 className="text-display text-primary-foreground mb-4">
-              {project.title}
-            </h1>
-            {project.subtitle ? (
-              <p className="text-subheading text-primary-foreground/90 mb-6">
+              <h1 className="font-serif text-4xl md:text-6xl lg:text-7xl xl:text-8xl text-primary-foreground font-light tracking-wide mb-4">
+                {project.title}
+              </h1>
+
+              <p className="text-primary-foreground/80 text-lg md:text-xl font-light max-w-2xl">
                 {project.subtitle}
               </p>
-            ) : null}
-
-            <div className="flex flex-wrap gap-3">
-              {project.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="text-xs px-3 py-1 border border-primary-foreground/40 rounded-full text-primary-foreground/90"
-                >
-                  {tag}
-                </span>
-              ))}
             </div>
           </div>
         </div>
+
+        <div
+          className={`absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-primary-foreground/50 transition-all duration-1000 delay-700 ${
+            isLoaded ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          <span className="text-xs uppercase tracking-[0.2em]">Explore</span>
+          <div className="w-px h-12 bg-gradient-to-b from-primary-foreground/50 to-transparent animate-pulse" />
+        </div>
       </section>
 
-      {/* Content */}
-      <section className="py-24">
+      {/* Project Info Section */}
+      <section className="py-24 md:py-32 bg-background">
         <div className="container-custom">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
-            {/* Description */}
-            <div className="lg:col-span-8 space-y-10">
-              <p className="text-body-large text-foreground/90 leading-relaxed">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
+            <div className="lg:col-span-2 space-y-8">
+              <p className="text-heading text-foreground/90 leading-relaxed">
                 {project.description}
               </p>
 
-              {detailLines.length > 0 ? (
-                <div className="space-y-6 pt-8">
-                  {detailLines.map((line, index) => (
-                    <p
-                      key={index}
-                      className="text-body-large border-l-2 border-border pl-6"
-                    >
-                      {line}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
+              <div className="space-y-6 pt-8">
+                {(project.details || []).map((detail, index) => (
+                  <p key={index} className="text-body-large border-l-2 border-border pl-6">
+                    {detail}
+                  </p>
+                ))}
+              </div>
             </div>
 
-            {/* Specs */}
-            <div className="lg:col-span-4 space-y-8">
+            <div className="space-y-8">
               <div className="space-y-6">
-                {specs.map((spec, index) => (
+                {[
+                  { label: "Location", value: project.location },
+                  { label: "Year", value: project.year },
+                  { label: "Category", value: project.category },
+                  { label: "Material", value: project.material },
+                  { label: "Area", value: project.area },
+                  { label: "Status", value: project.status },
+                ].map((spec, index) => (
                   <div key={index} className="border-b border-border pb-4">
-                    <span className="text-caption block mb-1">
-                      {spec.label}
-                    </span>
-                    <span className="text-body-large text-foreground/90">
-                      {spec.value}
-                    </span>
+                    <span className="text-caption block mb-1">{spec.label}</span>
+                    <span className="text-lg font-serif">{spec.value}</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Prev / Next */}
-          <div className="flex items-center justify-between mt-20 pt-12 border-t border-border">
+      {/* Navigation to other projects */}
+      <section className="py-16 bg-muted">
+        <div className="container-custom">
+          <div className="grid grid-cols-2 gap-8">
             {prevProject ? (
               <Link
                 to={`/project/${prevProject.id}`}
-                className="group inline-flex items-center gap-3"
+                className="group flex items-center gap-4 hover:opacity-70 transition-opacity"
               >
-                <ArrowLeft
-                  size={18}
-                  className="text-muted-foreground group-hover:text-foreground transition-colors"
-                />
+                <ArrowLeft className="w-6 h-6 group-hover:-translate-x-2 transition-transform" />
                 <div>
-                  <p className="text-caption">Previous</p>
-                  <p className="text-body-large group-hover:underline">
-                    {prevProject.title}
-                  </p>
+                  <span className="text-caption block mb-1">Previous</span>
+                  <span className="font-serif text-lg">{prevProject.title}</span>
                 </div>
               </Link>
             ) : (
@@ -181,18 +167,13 @@ const ProjectDetail = () => {
             {nextProject ? (
               <Link
                 to={`/project/${nextProject.id}`}
-                className="group inline-flex items-center gap-3 text-right"
+                className="group flex items-center gap-4 justify-end text-right hover:opacity-70 transition-opacity"
               >
                 <div>
-                  <p className="text-caption">Next</p>
-                  <p className="text-body-large group-hover:underline">
-                    {nextProject.title}
-                  </p>
+                  <span className="text-caption block mb-1">Next</span>
+                  <span className="font-serif text-lg">{nextProject.title}</span>
                 </div>
-                <ArrowRight
-                  size={18}
-                  className="text-muted-foreground group-hover:text-foreground transition-colors"
-                />
+                <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
               </Link>
             ) : (
               <div />
