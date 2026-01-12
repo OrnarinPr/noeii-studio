@@ -13,6 +13,7 @@ import {
 import { useAdmin } from "@/context/AdminContext";
 import type { Product } from "@/data/products";
 import { toast } from "@/components/ui/use-toast";
+import { uploadImage } from "@/services/uploads";
 
 type Category = "All" | "Seating" | "Tables" | "Lighting" | "Objects" | "Storage";
 
@@ -33,28 +34,20 @@ const PRODUCT_CATEGORIES: Exclude<Category, "All">[] = [
   "Storage",
 ];
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.onload = () => resolve(String(reader.result));
-    reader.readAsDataURL(file);
-  });
-}
-
 function isAllowedImage(file: File) {
   const okType = ["image/png", "image/jpeg", "image/webp"].includes(file.type);
-  const okSize = file.size <= 1.5 * 1024 * 1024; // 1.5MB
+  const okSize = file.size <= 3 * 1024 * 1024; // 3MB
   return { okType, okSize };
 }
 
 const Shop = () => {
   const queryClient = useQueryClient();
-  const { isAdmin, editMode } = useAdmin();
+  const { isAdmin, editMode, token } = useAdmin();
 
   const [activeCategory, setActiveCategory] = useState<Category>("All");
   const [editorOpen, setEditorOpen] = useState(false);
   const [draft, setDraft] = useState<Product | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products"],
@@ -91,6 +84,15 @@ const Shop = () => {
   const onSave = async () => {
     if (!draft) return;
 
+    if (!isAdmin || !editMode || !token) {
+      toast({
+        title: "Admin required",
+        description: "Please login as admin to save changes.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!draft.name.trim()) {
       toast({
         title: "Missing name",
@@ -118,21 +120,92 @@ const Shop = () => {
       return;
     }
 
-    await upsertProduct(draft);
-    await queryClient.invalidateQueries({ queryKey: ["products"] });
-
-    toast({ title: "Saved", description: "Product updated." });
-    closeEditor();
+    try {
+      await upsertProduct(draft, token);
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast({ title: "Saved", description: "Product updated." });
+      closeEditor();
+    } catch (e: any) {
+      toast({
+        title: "Save failed",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const onDelete = async (id: string) => {
+    if (!isAdmin || !editMode || !token) {
+      toast({
+        title: "Admin required",
+        description: "Please login as admin to delete.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const ok = window.confirm("Delete this product?");
     if (!ok) return;
 
-    await deleteProduct(id);
-    await queryClient.invalidateQueries({ queryKey: ["products"] });
+    try {
+      await deleteProduct(id, token);
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast({ title: "Deleted", description: "Product removed." });
+    } catch (e: any) {
+      toast({
+        title: "Delete failed",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
-    toast({ title: "Deleted", description: "Product removed." });
+  const onUpload = async (file: File) => {
+    if (!draft) return;
+
+    if (!token) {
+      toast({
+        title: "Admin required",
+        description: "Please login as admin to upload.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { okType, okSize } = isAllowedImage(file);
+
+    if (!okType) {
+      toast({
+        title: "Unsupported file type",
+        description: "Please upload PNG, JPG, or WEBP.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!okSize) {
+      toast({
+        title: "File too large",
+        description: "Please use an image <= 3MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setUploading(true);
+      const url = await uploadImage(file, token); // returns "/uploads/xxx.jpg"
+      setDraft({ ...draft, image: url });
+      toast({ title: "Uploaded", description: "Image uploaded to server." });
+    } catch (e: any) {
+      toast({
+        title: "Upload failed",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -174,10 +247,11 @@ const Shop = () => {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`text-caption whitespace-nowrap transition-colors ${activeCategory === cat
+                    className={`text-caption whitespace-nowrap transition-colors ${
+                      activeCategory === cat
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground"
-                      }`}
+                    }`}
                   >
                     {cat}
                   </button>
@@ -209,7 +283,6 @@ const Shop = () => {
         </div>
       </section>
 
-
       {/* Products */}
       <section className="pb-24">
         <div className="container-custom">
@@ -233,9 +306,7 @@ const Shop = () => {
                   </div>
 
                   <div className="flex items-start justify-between gap-4 mb-2">
-                    <p className="text-caption text-muted-foreground">
-                      {product.category}
-                    </p>
+                    <p className="text-caption text-muted-foreground">{product.category}</p>
 
                     {isAdmin && editMode ? (
                       <div className="flex items-center gap-3 text-xs">
@@ -295,9 +366,7 @@ const Shop = () => {
               </p>
               <div className="space-y-2">
                 <p className="text-base">shop@noeii-arch.jp</p>
-                <p className="text-muted-foreground text-sm">
-                  Response within 48 hours
-                </p>
+                <p className="text-muted-foreground text-sm">Response within 48 hours</p>
               </div>
             </div>
 
@@ -324,13 +393,9 @@ const Shop = () => {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="font-serif text-xl">
-                  {products.some((p) => p.id === draft.id)
-                    ? "Edit Product"
-                    : "New Product"}
+                  {products.some((p) => p.id === draft.id) ? "Edit Product" : "New Product"}
                 </div>
-                <div className="text-sm text-muted-foreground mt-1">
-                  Update fields and save.
-                </div>
+                <div className="text-sm text-muted-foreground mt-1">Update fields and save.</div>
               </div>
 
               <button
@@ -357,10 +422,7 @@ const Shop = () => {
                 <select
                   value={draft.category}
                   onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      category: e.target.value as Product["category"],
-                    })
+                    setDraft({ ...draft, category: e.target.value as Product["category"] })
                   }
                   className="w-full border border-border bg-background px-4 py-3 outline-none"
                 >
@@ -376,7 +438,6 @@ const Shop = () => {
               <div>
                 <div className="text-caption mb-2">Image</div>
 
-                {/* Preview */}
                 <div className="mb-3 aspect-[4/3] overflow-hidden border border-border bg-muted">
                   {draft.image ? (
                     <img
@@ -389,66 +450,32 @@ const Shop = () => {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-
-                      const { okType, okSize } = isAllowedImage(file);
-
-                      if (!okType) {
-                        toast({
-                          title: "Unsupported file type",
-                          description: "Please upload PNG, JPG, or WEBP.",
-                          variant: "destructive",
-                        });
+                  <label className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors cursor-pointer inline-flex items-center justify-center">
+                    {uploading ? "Uploading..." : "Upload Image"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        await onUpload(file);
                         e.currentTarget.value = "";
-                        return;
-                      }
-
-                      if (!okSize) {
-                        toast({
-                          title: "File too large",
-                          description: "Please use an image <= 1.5MB for now.",
-                          variant: "destructive",
-                        });
-                        e.currentTarget.value = "";
-                        return;
-                      }
-
-                      try {
-                        const dataUrl = await fileToDataUrl(file);
-                        setDraft({ ...draft, image: dataUrl });
-                        toast({ title: "Uploaded", description: "Image updated." });
-                      } catch {
-                        toast({
-                          title: "Upload failed",
-                          description: "Could not read the file.",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        e.currentTarget.value = "";
-                      }
-                    }}
-                    className="block w-full text-sm"
-                  />
+                      }}
+                    />
+                  </label>
 
                   <div className="text-xs text-muted-foreground">
-                    Local upload (saved in browser). Later we can switch to real
-                    storage (Supabase) for production.
+                    Upload stores the image on your backend and returns a /uploads/... URL.
                   </div>
 
                   <div className="pt-2">
                     <div className="text-caption mb-2">Or paste image URL</div>
                     <input
                       value={draft.image}
-                      onChange={(e) =>
-                        setDraft({ ...draft, image: e.target.value })
-                      }
+                      onChange={(e) => setDraft({ ...draft, image: e.target.value })}
                       className="w-full border border-border bg-background px-4 py-3 outline-none"
-                      placeholder="https://..."
+                      placeholder="https://... or /uploads/..."
                     />
                   </div>
                 </div>
@@ -458,9 +485,7 @@ const Shop = () => {
                 <div className="text-caption mb-2">Description</div>
                 <textarea
                   value={draft.description}
-                  onChange={(e) =>
-                    setDraft({ ...draft, description: e.target.value })
-                  }
+                  onChange={(e) => setDraft({ ...draft, description: e.target.value })}
                   className="w-full min-h-[120px] border border-border bg-background px-4 py-3 outline-none"
                   placeholder="Describe the product..."
                 />

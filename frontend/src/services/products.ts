@@ -1,46 +1,39 @@
-import { products as seedProducts, type Product } from "@/data/products";
+import type { Product } from "@/data/products";
+import { apiJson, authHeaders } from "@/services/api";
 
-const STORAGE_KEY = "noeii_products_v1";
-
-function readStore(): Product[] | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as Product[];
-  } catch {
-    return null;
-  }
-}
-
-function writeStore(items: Product[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+export function createNewProductId() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
 export async function listProducts(): Promise<Product[]> {
-  const stored = readStore();
-  if (stored) return stored;
-
-  writeStore(seedProducts);
-  return seedProducts;
+  return apiJson<Product[]>("/api/products");
 }
 
-export async function upsertProduct(input: Product): Promise<Product[]> {
-  const current = (await listProducts()).slice();
-  const idx = current.findIndex((p) => p.id === input.id);
-
-  if (idx >= 0) current[idx] = input;
-  else current.unshift(input);
-
-  writeStore(current);
-  return current;
+export async function getProduct(id: string): Promise<Product | null> {
+  return apiJson<Product | null>(`/api/products/${id}`);
 }
 
-export async function deleteProduct(id: string): Promise<Product[]> {
-  const current = (await listProducts()).filter((p) => p.id !== id);
-  writeStore(current);
-  return current;
+export async function upsertProduct(next: Product, token: string): Promise<Product> {
+  const exists = await getProduct(next.id);
+
+  if (exists) {
+    return apiJson<Product>(`/api/products/${next.id}`, {
+      method: "PUT",
+      headers: authHeaders(token),
+      body: JSON.stringify(next),
+    });
+  }
+
+  return apiJson<Product>("/api/products", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(next),
+  });
 }
 
-export function createNewProductId(): string {
-  return String(Date.now());
+export async function deleteProduct(id: string, token: string): Promise<void> {
+  await apiJson<{ ok: boolean }>(`/api/products/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
 }

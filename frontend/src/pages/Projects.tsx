@@ -15,6 +15,7 @@ import {
   upsertProject,
 } from "@/services/projects";
 import { toast } from "@/components/ui/use-toast";
+import { uploadImage } from "@/services/uploads";
 
 type CategoryFilter = "All" | ProjectCategory;
 
@@ -30,28 +31,20 @@ const CATEGORIES: CategoryFilter[] = [
   "Public",
 ];
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.onload = () => resolve(String(reader.result));
-    reader.readAsDataURL(file);
-  });
-}
-
 function isAllowedImage(file: File) {
   const okType = ["image/png", "image/jpeg", "image/webp"].includes(file.type);
-  const okSize = file.size <= 1.5 * 1024 * 1024; // 1.5MB
+  const okSize = file.size <= 3 * 1024 * 1024; // 3MB
   return { okType, okSize };
 }
 
 const Projects = () => {
   const queryClient = useQueryClient();
-  const { isAdmin, editMode } = useAdmin();
+  const { isAdmin, editMode, token } = useAdmin();
 
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>("All");
   const [editorOpen, setEditorOpen] = useState(false);
   const [draft, setDraft] = useState<Project | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
@@ -93,8 +86,65 @@ const Projects = () => {
     setDraft(null);
   };
 
+  const onUpload = async (file: File) => {
+    if (!draft) return;
+
+    if (!isAdmin || !editMode || !token) {
+      toast({
+        title: "Admin required",
+        description: "Please login as admin to upload.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { okType, okSize } = isAllowedImage(file);
+
+    if (!okType) {
+      toast({
+        title: "Unsupported file type",
+        description: "Please upload PNG, JPG, or WEBP.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!okSize) {
+      toast({
+        title: "File too large",
+        description: "Please use an image <= 3MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setUploading(true);
+      const url = await uploadImage(file, token); // "/uploads/xxx.jpg" or full URL (depending on BE)
+      setDraft({ ...draft, image: url });
+      toast({ title: "Uploaded", description: "Image uploaded to server." });
+    } catch (e: any) {
+      toast({
+        title: "Upload failed",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const onSave = async () => {
     if (!draft) return;
+
+    if (!isAdmin || !editMode || !token) {
+      toast({
+        title: "Admin required",
+        description: "Please login as admin to save changes.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (!draft.title.trim()) {
       toast({
@@ -120,21 +170,46 @@ const Projects = () => {
       tags: (draft.tags || []).map((t) => t.trim()).filter(Boolean),
     };
 
-    await upsertProject(cleaned);
-    await queryClient.invalidateQueries({ queryKey: ["projects"] });
+    try {
+      await upsertProject(cleaned, token);
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
 
-    toast({ title: "Saved", description: "Project updated." });
-    closeEditor();
+      toast({ title: "Saved", description: "Project updated." });
+      closeEditor();
+    } catch (e: any) {
+      toast({
+        title: "Save failed",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const onDelete = async (id: string) => {
+    if (!isAdmin || !editMode || !token) {
+      toast({
+        title: "Admin required",
+        description: "Please login as admin to delete.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const ok = window.confirm("Delete this project?");
     if (!ok) return;
 
-    await deleteProject(id);
-    await queryClient.invalidateQueries({ queryKey: ["projects"] });
+    try {
+      await deleteProject(id, token);
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
 
-    toast({ title: "Deleted", description: "Project removed." });
+      toast({ title: "Deleted", description: "Project removed." });
+    } catch (e: any) {
+      toast({
+        title: "Delete failed",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -179,10 +254,11 @@ const Projects = () => {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`text-caption whitespace-nowrap transition-colors ${activeCategory === cat
+                    className={`text-caption whitespace-nowrap transition-colors ${
+                      activeCategory === cat
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground"
-                      }`}
+                    }`}
                   >
                     {cat}
                   </button>
@@ -228,10 +304,7 @@ const Projects = () => {
                 className={`py-12 md:py-20 ${index % 2 === 0 ? "" : "bg-muted/30"}`}
               >
                 <div className="container-custom">
-                  <div
-                    className={`grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center ${index % 2 === 1 ? "lg:flex-row-reverse" : ""
-                      }`}
-                  >
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
                     {/* Image */}
                     <div className={`${index % 2 === 1 ? "lg:order-2" : ""}`}>
                       <div className="aspect-[4/5] overflow-hidden image-fade bg-muted">
@@ -286,7 +359,10 @@ const Projects = () => {
                         {project.description}
                       </p>
 
-                      <Link to={`/project/${project.id}`} className="text-caption link-underline">
+                      <Link
+                        to={`/project/${project.id}`}
+                        className="text-caption link-underline"
+                      >
                         View Project
                       </Link>
                     </div>
@@ -406,10 +482,7 @@ const Projects = () => {
                   <select
                     value={draft.status}
                     onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        status: e.target.value as Project["status"],
-                      })
+                      setDraft({ ...draft, status: e.target.value as Project["status"] })
                     }
                     className="w-full border border-border bg-background px-4 py-3 outline-none"
                   >
@@ -442,7 +515,7 @@ const Projects = () => {
                 </div>
               </div>
 
-              {/* Image Upload + URL */}
+              {/* Image Upload + URL (SERVER UPLOAD) */}
               <div>
                 <div className="text-caption mb-2">Image</div>
 
@@ -458,54 +531,23 @@ const Projects = () => {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-
-                      const { okType, okSize } = isAllowedImage(file);
-
-                      if (!okType) {
-                        toast({
-                          title: "Unsupported file type",
-                          description: "Please upload PNG, JPG, or WEBP.",
-                          variant: "destructive",
-                        });
+                  <label className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors cursor-pointer inline-flex items-center justify-center">
+                    {uploading ? "Uploading..." : "Upload Image"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        await onUpload(file);
                         e.currentTarget.value = "";
-                        return;
-                      }
-
-                      if (!okSize) {
-                        toast({
-                          title: "File too large",
-                          description: "Please use an image <= 1.5MB for now.",
-                          variant: "destructive",
-                        });
-                        e.currentTarget.value = "";
-                        return;
-                      }
-
-                      try {
-                        const dataUrl = await fileToDataUrl(file);
-                        setDraft({ ...draft, image: dataUrl });
-                        toast({ title: "Uploaded", description: "Image updated." });
-                      } catch {
-                        toast({
-                          title: "Upload failed",
-                          description: "Could not read the file.",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        e.currentTarget.value = "";
-                      }
-                    }}
-                    className="block w-full text-sm"
-                  />
+                      }}
+                    />
+                  </label>
 
                   <div className="text-xs text-muted-foreground">
-                    Local upload (saved in browser). Later we can switch to real storage (Supabase) for production.
+                    Upload stores the image on your backend and returns a /uploads/... URL.
                   </div>
 
                   <div className="pt-2">
@@ -514,7 +556,7 @@ const Projects = () => {
                       value={draft.image}
                       onChange={(e) => setDraft({ ...draft, image: e.target.value })}
                       className="w-full border border-border bg-background px-4 py-3 outline-none"
-                      placeholder="https://..."
+                      placeholder="https://... or /uploads/..."
                     />
                   </div>
                 </div>
@@ -535,10 +577,7 @@ const Projects = () => {
                 <textarea
                   value={(draft.details || []).join("\n")}
                   onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      details: e.target.value.split("\n"),
-                    })
+                    setDraft({ ...draft, details: e.target.value.split("\n") })
                   }
                   className="w-full min-h-[140px] border border-border bg-background px-4 py-3 outline-none"
                   placeholder="Detail line 1&#10;Detail line 2&#10;Detail line 3"

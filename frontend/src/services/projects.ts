@@ -1,41 +1,38 @@
 import type { Project } from "@/data/projects";
-import { DEFAULT_PROJECTS } from "@/data/projects";
+import { apiJson, authHeaders } from "@/services/api";
 
-const KEY = "noeii_projects_v1";
-
-function read(): Project[] {
-  const raw = localStorage.getItem(KEY);
-  if (!raw) return DEFAULT_PROJECTS;
-  try {
-    const data = JSON.parse(raw) as Project[];
-    if (!Array.isArray(data) || data.length === 0) return DEFAULT_PROJECTS;
-    return data;
-  } catch {
-    return DEFAULT_PROJECTS;
-  }
-}
-
-function write(projects: Project[]) {
-  localStorage.setItem(KEY, JSON.stringify(projects));
+export function createNewProjectId() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
 export async function listProjects(): Promise<Project[]> {
-  return read();
+  return apiJson<Project[]>("/api/projects");
 }
 
-export function createNewProjectId(): string {
-  return `${Date.now()}`;
+export async function getProject(id: string): Promise<Project | null> {
+  return apiJson<Project | null>(`/api/projects/${id}`);
 }
 
-export async function upsertProject(project: Project): Promise<void> {
-  const projects = read();
-  const idx = projects.findIndex((p) => p.id === project.id);
-  if (idx >= 0) projects[idx] = project;
-  else projects.unshift(project);
-  write(projects);
+export async function upsertProject(next: Project, token: string): Promise<Project> {
+  const exists = await getProject(next.id);
+  if (exists) {
+    return apiJson<Project>(`/api/projects/${next.id}`, {
+      method: "PUT",
+      headers: authHeaders(token),
+      body: JSON.stringify(next),
+    });
+  }
+
+  return apiJson<Project>("/api/projects", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(next),
+  });
 }
 
-export async function deleteProject(id: string): Promise<void> {
-  const projects = read().filter((p) => p.id !== id);
-  write(projects);
+export async function deleteProject(id: string, token: string): Promise<void> {
+  await apiJson<{ ok: boolean }>(`/api/projects/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
 }
