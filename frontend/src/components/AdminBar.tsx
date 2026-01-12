@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAdmin } from "@/context/AdminContext";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -9,36 +9,54 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 
+function onlyDigits(s: string) {
+  return s.replace(/\D/g, "");
+}
+
 export default function AdminBar() {
   const { isAdmin, editMode, setEditMode, login, logout } = useAdmin();
 
   const [open, setOpen] = useState(false);
   const [passcode, setPasscode] = useState("");
+  const [otp, setOtp] = useState(""); // 6-digit TOTP
   const [loading, setLoading] = useState(false);
+
+  const otpClean = useMemo(() => onlyDigits(otp).slice(0, 6), [otp]);
 
   // Reset modal state when closed
   useEffect(() => {
     if (!open) {
       setPasscode("");
+      setOtp("");
       setLoading(false);
     }
   }, [open]);
 
   const onLogin = async () => {
-    if (!passcode.trim()) {
+    const pc = passcode.trim();
+    if (!pc) {
       toast({ title: "Missing passcode", variant: "destructive" });
+      return;
+    }
+
+    if (otpClean.length !== 6) {
+      toast({
+        title: "Missing OTP",
+        description: "Enter the 6-digit code from your authenticator app.",
+        variant: "destructive",
+      });
       return;
     }
 
     try {
       setLoading(true);
-      await login(passcode.trim());
+      await login(pc, otpClean);
       setOpen(false);
       toast({ title: "Admin unlocked" });
     } catch (e: any) {
       toast({
         title: "Login failed",
-        description: e?.message || "Invalid passcode",
+        description: e?.message || "Invalid passcode or OTP",
         variant: "destructive",
       });
     } finally {
@@ -103,7 +121,7 @@ export default function AdminBar() {
                   Admin Login
                 </DialogTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Enter passcode to enable editing.
+                  Enter passcode and the 6-digit OTP to enable editing.
                 </p>
               </div>
 
@@ -113,22 +131,48 @@ export default function AdminBar() {
             </div>
           </DialogHeader>
 
-          <div className="mt-4">
-            <div className="text-caption mb-2">Passcode</div>
+          <div className="mt-4 space-y-5">
+            {/* Passcode */}
+            <div>
+              <div className="text-caption mb-2">Passcode</div>
+              <input
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    // If OTP already filled, login. Otherwise move focus naturally.
+                    if (otpClean.length === 6) onLogin();
+                  }
+                }}
+                className="w-full border border-border bg-background px-4 py-3 outline-none"
+                placeholder="••••••••"
+                type="password"
+                autoFocus
+                disabled={loading}
+              />
+            </div>
 
-            <input
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onLogin();
-              }}
-              className="w-full border border-border bg-background px-4 py-3 outline-none"
-              placeholder="••••••••"
-              type="password"
-              autoFocus
-            />
+            {/* OTP */}
+            <div>
+              <div className="text-caption mb-2">OTP (6 digits)</div>
+              <input
+                value={otpClean}
+                onChange={(e) => setOtp(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onLogin();
+                }}
+                className="w-full border border-border bg-background px-4 py-3 outline-none tracking-[0.35em]"
+                placeholder="123456"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                disabled={loading}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Use the code from your authenticator app (changes every ~30 seconds).
+              </p>
+            </div>
 
-            <div className="mt-6 flex items-center justify-end gap-3">
+            <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setOpen(false)}
                 className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors"

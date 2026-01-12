@@ -2,7 +2,7 @@ import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import AdminBar from "@/components/AdminBar";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createNewProductId,
@@ -208,6 +208,19 @@ const Shop = () => {
     }
   };
 
+  // Lock page scroll while the editor drawer is open
+  useEffect(() => {
+    if (editorOpen) {
+      document.body.classList.add("no-scroll");
+    } else {
+      document.body.classList.remove("no-scroll");
+    }
+
+    return () => {
+      document.body.classList.remove("no-scroll");
+    };
+  }, [editorOpen]);
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -247,11 +260,10 @@ const Shop = () => {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`text-caption whitespace-nowrap transition-colors ${
-                      activeCategory === cat
+                    className={`text-caption whitespace-nowrap transition-colors ${activeCategory === cat
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground"
-                    }`}
+                      }`}
                   >
                     {cat}
                   </button>
@@ -298,7 +310,11 @@ const Shop = () => {
                 >
                   <div className="aspect-[4/5] bg-muted mb-6 overflow-hidden">
                     <img
-                      src={product.image}
+                      src={product.image.startsWith("/uploads/")
+                        ? `http://127.0.0.1:8000${product.image}`
+                        : product.image
+                      }
+
                       alt={product.name}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                       loading="lazy"
@@ -384,130 +400,144 @@ const Shop = () => {
 
       <Footer />
 
-      {/* Editor Modal */}
+      {/* Editor Modal (Replaced with Right Drawer; old logic preserved) */}
       {isAdmin && editMode && editorOpen && draft ? (
-        <div className="fixed inset-0 z-[70]">
-          <div className="absolute inset-0 bg-black/40" onClick={closeEditor} />
+        <>
+          {/* Overlay */}
+          <div
+            className="admin-drawer-overlay"
+            onClick={closeEditor}
+            aria-hidden="true"
+          />
 
-          <div className="absolute left-1/2 top-1/2 w-[92vw] max-w-xl -translate-x-1/2 -translate-y-1/2 bg-background border border-border p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="font-serif text-xl">
-                  {products.some((p) => p.id === draft.id) ? "Edit Product" : "New Product"}
+          {/* Drawer */}
+          <aside className="admin-drawer animate-drawer-in" role="dialog" aria-modal="true">
+            <div className="admin-drawer-header">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="font-serif text-2xl font-light">
+                    {products.some((p) => p.id === draft.id) ? "Edit Product" : "New Product"}
+                  </div>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    Update fields and save.
+                  </div>
                 </div>
-                <div className="text-sm text-muted-foreground mt-1">Update fields and save.</div>
-              </div>
 
-              <button
-                onClick={closeEditor}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 gap-4">
-              <div>
-                <div className="text-caption mb-2">Name</div>
-                <input
-                  value={draft.name}
-                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  className="w-full border border-border bg-background px-4 py-3 outline-none"
-                  placeholder="Product name"
-                />
-              </div>
-
-              <div>
-                <div className="text-caption mb-2">Category</div>
-                <select
-                  value={draft.category}
-                  onChange={(e) =>
-                    setDraft({ ...draft, category: e.target.value as Product["category"] })
-                  }
-                  className="w-full border border-border bg-background px-4 py-3 outline-none"
+                <button
+                  onClick={closeEditor}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {PRODUCT_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Image Upload + URL */}
-              <div>
-                <div className="text-caption mb-2">Image</div>
-
-                <div className="mb-3 aspect-[4/3] overflow-hidden border border-border bg-muted">
-                  {draft.image ? (
-                    <img
-                      src={draft.image}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : null}
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <label className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors cursor-pointer inline-flex items-center justify-center">
-                    {uploading ? "Uploading..." : "Upload Image"}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        await onUpload(file);
-                        e.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-
-                  <div className="text-xs text-muted-foreground">
-                    Upload stores the image on your backend and returns a /uploads/... URL.
-                  </div>
-
-                  <div className="pt-2">
-                    <div className="text-caption mb-2">Or paste image URL</div>
-                    <input
-                      value={draft.image}
-                      onChange={(e) => setDraft({ ...draft, image: e.target.value })}
-                      className="w-full border border-border bg-background px-4 py-3 outline-none"
-                      placeholder="https://... or /uploads/..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div className="text-caption mb-2">Description</div>
-                <textarea
-                  value={draft.description}
-                  onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                  className="w-full min-h-[120px] border border-border bg-background px-4 py-3 outline-none"
-                  placeholder="Describe the product..."
-                />
+                  Close
+                </button>
               </div>
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <button
-                onClick={closeEditor}
-                className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={onSave}
-                className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors"
-              >
-                Save
-              </button>
+            <div className="admin-drawer-body">
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <div className="admin-label">Name</div>
+                  <input
+                    value={draft.name}
+                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                    className="admin-input"
+                    placeholder="Product name"
+                  />
+                </div>
+
+                <div>
+                  <div className="admin-label">Category</div>
+                  <select
+                    value={draft.category}
+                    onChange={(e) =>
+                      setDraft({ ...draft, category: e.target.value as Product["category"] })
+                    }
+                    className="admin-input"
+                  >
+                    {PRODUCT_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Image Upload + URL */}
+                <div>
+                  <div className="admin-label">Image</div>
+
+                  <div className="mb-3 border border-border bg-muted p-2">
+                    {draft.image ? (
+                      <img
+                        src={draft.image}
+                        alt="Preview"
+                        className="admin-image-preview"
+                        loading="lazy"
+                      />
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <label className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors cursor-pointer inline-flex items-center justify-center">
+                      {uploading ? "Uploading..." : "Upload Image"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          await onUpload(file);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+
+                    <div className="text-xs text-muted-foreground">
+                      Upload stores the image on your backend and returns a /uploads/... URL.
+                    </div>
+
+                    <div className="pt-2">
+                      <div className="admin-label">Or paste image URL</div>
+                      <input
+                        value={draft.image}
+                        onChange={(e) => setDraft({ ...draft, image: e.target.value })}
+                        className="admin-input"
+                        placeholder="https://... or /uploads/..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="admin-label">Description</div>
+                  <textarea
+                    value={draft.description}
+                    onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                    className="w-full min-h-[120px] border border-border bg-background px-4 py-3 outline-none"
+                    placeholder="Describe the product..."
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+
+            <div className="admin-drawer-footer">
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={closeEditor}
+                  className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={onSave}
+                  className="text-caption border-thin px-4 py-3 hover:bg-accent transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </aside>
+        </>
       ) : null}
     </div>
   );

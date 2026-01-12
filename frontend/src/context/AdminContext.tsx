@@ -5,7 +5,7 @@ type AdminContextValue = {
   isAdmin: boolean;
   editMode: boolean;
   token: string | null;
-  login: (passcode: string) => Promise<void>;
+  login: (passcode: string, otp: string) => Promise<void>;
   logout: () => void;
   setEditMode: (v: boolean) => void;
 };
@@ -25,8 +25,8 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
   const isAdmin = !!token;
 
-  const login = async (passcode: string) => {
-    const res = await adminLogin(passcode);
+  const login = async (passcode: string, otp: string) => {
+    const res = await adminLogin(passcode, otp);
     localStorage.setItem(TOKEN_KEY, res.token);
     setToken(res.token);
     setEditMode(true);
