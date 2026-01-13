@@ -37,6 +37,19 @@ function isAllowedImage(file: File) {
   return { okType, okSize };
 }
 
+// ✅ Ensure image URL is usable by FE (absolute when BE returns /uploads/..)
+function toAbsoluteUrl(urlOrPath: string) {
+  const API_BASE =
+    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+  if (!urlOrPath) return "";
+  if (urlOrPath.startsWith("http://") || urlOrPath.startsWith("https://")) {
+    return urlOrPath;
+  }
+  if (urlOrPath.startsWith("/")) return `${API_BASE}${urlOrPath}`;
+  return `${API_BASE}/${urlOrPath}`;
+}
+
 const Projects = () => {
   const queryClient = useQueryClient();
   const { isAdmin, editMode, token } = useAdmin();
@@ -87,8 +100,6 @@ const Projects = () => {
   };
 
   const onUpload = async (file: File) => {
-    if (!draft) return;
-
     if (!isAdmin || !editMode || !token) {
       toast({
         title: "Admin required",
@@ -120,8 +131,14 @@ const Projects = () => {
 
     try {
       setUploading(true);
-      const url = await uploadImage(file, token); // "/uploads/xxx.jpg" or full URL (depending on BE)
-      setDraft({ ...draft, image: url });
+
+      // BE might return "/uploads/xxx.jpg" or full URL
+      const raw = await uploadImage(file, token);
+      const url = toAbsoluteUrl(String(raw || ""));
+
+      // ✅ avoid stale draft state (functional setState)
+      setDraft((prev) => (prev ? { ...prev, image: url } : prev));
+
       toast({ title: "Uploaded", description: "Image uploaded to server." });
     } catch (e: any) {
       toast({
@@ -166,6 +183,7 @@ const Projects = () => {
 
     const cleaned: Project = {
       ...draft,
+      image: toAbsoluteUrl(draft.image), // ✅ normalize before save too
       details: (draft.details || []).map((d) => d.trim()).filter(Boolean),
       tags: (draft.tags || []).map((t) => t.trim()).filter(Boolean),
     };
@@ -229,8 +247,8 @@ const Projects = () => {
 
             <div className="lg:col-span-5">
               <p className="text-body-large opacity-0 animate-fade-up stagger-1 max-w-md lg:ml-auto">
-                A selection of architectural works spanning residential, commercial,
-                and cultural spaces.
+                A selection of architectural works spanning residential,
+                commercial, and cultural spaces.
               </p>
 
               {isAdmin && editMode ? (
@@ -301,7 +319,9 @@ const Projects = () => {
             {filteredProjects.map((project, index) => (
               <article
                 key={project.id}
-                className={`py-12 md:py-20 ${index % 2 === 0 ? "" : "bg-muted/30"}`}
+                className={`py-12 md:py-20 ${
+                  index % 2 === 0 ? "" : "bg-muted/30"
+                }`}
               >
                 <div className="container-custom">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
@@ -309,7 +329,7 @@ const Projects = () => {
                     <div className={`${index % 2 === 1 ? "lg:order-2" : ""}`}>
                       <div className="aspect-[4/5] overflow-hidden image-fade bg-muted">
                         <img
-                          src={project.image}
+                          src={toAbsoluteUrl(project.image)}
                           alt={project.title}
                           className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
                           loading="lazy"
@@ -325,7 +345,10 @@ const Projects = () => {
                             {project.category}
                           </span>
                           {(project.tags || []).slice(0, 4).map((tag, i) => (
-                            <span key={i} className="text-muted-foreground text-xs">
+                            <span
+                              key={i}
+                              className="text-muted-foreground text-xs"
+                            >
                               + {tag}
                             </span>
                           ))}
@@ -401,7 +424,9 @@ const Projects = () => {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="font-serif text-xl">
-                  {projects.some((p) => p.id === draft.id) ? "Edit Project" : "New Project"}
+                  {projects.some((p) => p.id === draft.id)
+                    ? "Edit Project"
+                    : "New Project"}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
                   Update fields and save.
@@ -421,7 +446,11 @@ const Projects = () => {
                 <div className="text-caption mb-2">Title</div>
                 <input
                   value={draft.title}
-                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                  onChange={(e) =>
+                    setDraft((prev) =>
+                      prev ? { ...prev, title: e.target.value } : prev
+                    )
+                  }
                   className="w-full border border-border bg-background px-4 py-3 outline-none"
                   placeholder="Project title"
                 />
@@ -431,7 +460,11 @@ const Projects = () => {
                 <div className="text-caption mb-2">Subtitle</div>
                 <input
                   value={draft.subtitle}
-                  onChange={(e) => setDraft({ ...draft, subtitle: e.target.value })}
+                  onChange={(e) =>
+                    setDraft((prev) =>
+                      prev ? { ...prev, subtitle: e.target.value } : prev
+                    )
+                  }
                   className="w-full border border-border bg-background px-4 py-3 outline-none"
                   placeholder="Project subtitle"
                 />
@@ -442,7 +475,11 @@ const Projects = () => {
                   <div className="text-caption mb-2">Location</div>
                   <input
                     value={draft.location}
-                    onChange={(e) => setDraft({ ...draft, location: e.target.value })}
+                    onChange={(e) =>
+                      setDraft((prev) =>
+                        prev ? { ...prev, location: e.target.value } : prev
+                      )
+                    }
                     className="w-full border border-border bg-background px-4 py-3 outline-none"
                     placeholder="Tokyo, Japan"
                   />
@@ -452,7 +489,11 @@ const Projects = () => {
                   <div className="text-caption mb-2">Year</div>
                   <input
                     value={draft.year}
-                    onChange={(e) => setDraft({ ...draft, year: e.target.value })}
+                    onChange={(e) =>
+                      setDraft((prev) =>
+                        prev ? { ...prev, year: e.target.value } : prev
+                      )
+                    }
                     className="w-full border border-border bg-background px-4 py-3 outline-none"
                     placeholder="2026"
                   />
@@ -465,7 +506,14 @@ const Projects = () => {
                   <select
                     value={draft.category}
                     onChange={(e) =>
-                      setDraft({ ...draft, category: e.target.value as ProjectCategory })
+                      setDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              category: e.target.value as ProjectCategory,
+                            }
+                          : prev
+                      )
                     }
                     className="w-full border border-border bg-background px-4 py-3 outline-none"
                   >
@@ -482,7 +530,11 @@ const Projects = () => {
                   <select
                     value={draft.status}
                     onChange={(e) =>
-                      setDraft({ ...draft, status: e.target.value as Project["status"] })
+                      setDraft((prev) =>
+                        prev
+                          ? { ...prev, status: e.target.value as Project["status"] }
+                          : prev
+                      )
                     }
                     className="w-full border border-border bg-background px-4 py-3 outline-none"
                   >
@@ -498,7 +550,11 @@ const Projects = () => {
                   <div className="text-caption mb-2">Material</div>
                   <input
                     value={draft.material}
-                    onChange={(e) => setDraft({ ...draft, material: e.target.value })}
+                    onChange={(e) =>
+                      setDraft((prev) =>
+                        prev ? { ...prev, material: e.target.value } : prev
+                      )
+                    }
                     className="w-full border border-border bg-background px-4 py-3 outline-none"
                     placeholder="Concrete"
                   />
@@ -508,7 +564,11 @@ const Projects = () => {
                   <div className="text-caption mb-2">Area</div>
                   <input
                     value={draft.area}
-                    onChange={(e) => setDraft({ ...draft, area: e.target.value })}
+                    onChange={(e) =>
+                      setDraft((prev) =>
+                        prev ? { ...prev, area: e.target.value } : prev
+                      )
+                    }
                     className="w-full border border-border bg-background px-4 py-3 outline-none"
                     placeholder="520 m²"
                   />
@@ -522,10 +582,18 @@ const Projects = () => {
                 <div className="mb-3 aspect-[4/3] overflow-hidden border border-border bg-muted">
                   {draft.image ? (
                     <img
-                      src={draft.image}
+                      src={toAbsoluteUrl(draft.image)}
                       alt="Preview"
                       className="w-full h-full object-cover"
                       loading="lazy"
+                      onError={() => {
+                        toast({
+                          title: "Preview failed",
+                          description:
+                            "Image URL not reachable. Check VITE_API_BASE_URL or backend /uploads.",
+                          variant: "destructive",
+                        });
+                      }}
                     />
                   ) : null}
                 </div>
@@ -547,14 +615,19 @@ const Projects = () => {
                   </label>
 
                   <div className="text-xs text-muted-foreground">
-                    Upload stores the image on your backend and returns a /uploads/... URL.
+                    Upload stores the image on your backend and returns a
+                    /uploads/... URL.
                   </div>
 
                   <div className="pt-2">
                     <div className="text-caption mb-2">Or paste image URL</div>
                     <input
                       value={draft.image}
-                      onChange={(e) => setDraft({ ...draft, image: e.target.value })}
+                      onChange={(e) =>
+                        setDraft((prev) =>
+                          prev ? { ...prev, image: e.target.value } : prev
+                        )
+                      }
                       className="w-full border border-border bg-background px-4 py-3 outline-none"
                       placeholder="https://... or /uploads/..."
                     />
@@ -566,7 +639,11 @@ const Projects = () => {
                 <div className="text-caption mb-2">Description</div>
                 <textarea
                   value={draft.description}
-                  onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                  onChange={(e) =>
+                    setDraft((prev) =>
+                      prev ? { ...prev, description: e.target.value } : prev
+                    )
+                  }
                   className="w-full min-h-[120px] border border-border bg-background px-4 py-3 outline-none"
                   placeholder="Describe the project..."
                 />
@@ -577,7 +654,11 @@ const Projects = () => {
                 <textarea
                   value={(draft.details || []).join("\n")}
                   onChange={(e) =>
-                    setDraft({ ...draft, details: e.target.value.split("\n") })
+                    setDraft((prev) =>
+                      prev
+                        ? { ...prev, details: e.target.value.split("\n") }
+                        : prev
+                    )
                   }
                   className="w-full min-h-[140px] border border-border bg-background px-4 py-3 outline-none"
                   placeholder="Detail line 1&#10;Detail line 2&#10;Detail line 3"
@@ -589,13 +670,17 @@ const Projects = () => {
                 <input
                   value={(draft.tags || []).join(", ")}
                   onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      tags: e.target.value
-                        .split(",")
-                        .map((s) => s.trim())
-                        .filter(Boolean),
-                    })
+                    setDraft((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            tags: e.target.value
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter(Boolean),
+                          }
+                        : prev
+                    )
                   }
                   className="w-full border border-border bg-background px-4 py-3 outline-none"
                   placeholder="Tokyo, 2026, Hotel, Concrete"

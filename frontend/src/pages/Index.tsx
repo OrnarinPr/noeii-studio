@@ -6,6 +6,17 @@ import { ArrowDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { listProjects } from "@/services/projects";
 
+function toAbsoluteUrl(urlOrPath: string) {
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+  if (!urlOrPath) return "";
+  if (urlOrPath.startsWith("http://") || urlOrPath.startsWith("https://")) {
+    return urlOrPath;
+  }
+  if (urlOrPath.startsWith("/")) return `${API_BASE}${urlOrPath}`;
+  return `${API_BASE}/${urlOrPath}`;
+}
+
 const Index = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -153,17 +164,23 @@ const Index = () => {
           <div
             className="absolute inset-0 w-full h-full transition-transform duration-100 ease-out"
             style={{
-              transform: `translate(${mousePosition.x * 0.5}px, ${mousePosition.y * 0.5}px) scale(1.1)`,
+              transform: `translate(${mousePosition.x * 0.5}px, ${
+                mousePosition.y * 0.5
+              }px) scale(1.1)`,
             }}
           >
             <img
-              src={project.image}
+              src={toAbsoluteUrl(project.image)}
               alt={project.title}
               className={`w-full h-full object-cover transition-all duration-1000 ${
                 isLoaded ? "scale-100 opacity-100" : "scale-110 opacity-0"
               }`}
               style={{ transitionDelay: `${index * 100}ms` }}
               loading="lazy"
+              onError={() => {
+                // optional debug toast if you want
+                // console.log("Image failed:", project.image);
+              }}
             />
           </div>
 
@@ -179,9 +196,7 @@ const Index = () => {
                 </p>
 
                 <Link to={`/project/${project.id}`} className="group inline-block">
-                  <h2
-                    className="font-serif text-4xl md:text-6xl lg:text-7xl xl:text-8xl text-primary-foreground font-light tracking-wide leading-[1.1] transition-transform duration-500 group-hover:translate-x-2"
-                  >
+                  <h2 className="font-serif text-4xl md:text-6xl lg:text-7xl xl:text-8xl text-primary-foreground font-light tracking-wide leading-[1.1] transition-transform duration-500 group-hover:translate-x-2">
                     {project.title}
                   </h2>
                 </Link>
@@ -192,7 +207,6 @@ const Index = () => {
                   </p>
                 ) : null}
 
-                {/* tags safe */}
                 {Array.isArray(project.tags) && project.tags.length > 0 ? (
                   <div className="flex flex-wrap gap-3 mt-8">
                     {project.tags.map((tag) => (
@@ -225,7 +239,9 @@ const Index = () => {
         <div className="container-custom">
           <div className="max-w-3xl mx-auto text-center">
             <p className="text-caption mb-4">NOEII ARCH STUDIO</p>
-            <h2 className="text-heading mb-6">Minimal spaces with timeless elegance.</h2>
+            <h2 className="text-heading mb-6">
+              Minimal spaces with timeless elegance.
+            </h2>
             <p className="text-body-large mb-10">
               We craft architecture, interiors, and visual identity through light,
               material, and quiet proportions.

@@ -2,26 +2,48 @@ import { useParams, Link } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import type { Project } from "@/data/projects";
 import { listProjects } from "@/services/projects";
+
+function toAbsoluteUrl(urlOrPath: string) {
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+  if (!urlOrPath) return "";
+  if (urlOrPath.startsWith("http://") || urlOrPath.startsWith("https://")) {
+    return urlOrPath;
+  }
+  if (urlOrPath.startsWith("/")) return `${API_BASE}${urlOrPath}`;
+  return `${API_BASE}/${urlOrPath}`;
+}
 
 const ProjectDetail = () => {
   const { id } = useParams();
   const [isLoaded, setIsLoaded] = useState(false);
   const [parallaxOffset, setParallaxOffset] = useState(0);
 
-  const { data: projects = [] } = useQuery({
+  const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: listProjects,
   });
 
-  const project: Project | undefined = projects.find((p) => p.id === id);
-  const currentIndex = projects.findIndex((p) => p.id === id);
+  const project: Project | undefined = useMemo(
+    () => projects.find((p) => p.id === id),
+    [projects, id]
+  );
+
+  const currentIndex = useMemo(
+    () => projects.findIndex((p) => p.id === id),
+    [projects, id]
+  );
+
   const prevProject = currentIndex > 0 ? projects[currentIndex - 1] : null;
-  const nextProject = currentIndex < projects.length - 1 ? projects[currentIndex + 1] : null;
+  const nextProject =
+    currentIndex >= 0 && currentIndex < projects.length - 1
+      ? projects[currentIndex + 1]
+      : null;
 
   useEffect(() => {
     setIsLoaded(true);
@@ -31,6 +53,14 @@ const ProjectDetail = () => {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-body-large">Loading...</p>
+      </div>
+    );
+  }
 
   if (!project) {
     return (
@@ -45,6 +75,8 @@ const ProjectDetail = () => {
     );
   }
 
+  const heroSrc = toAbsoluteUrl(project.image);
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation transparent />
@@ -56,11 +88,12 @@ const ProjectDetail = () => {
           style={{ transform: `translateY(-${parallaxOffset}px)` }}
         >
           <img
-            src={project.image}
+            src={heroSrc}
             alt={project.title}
             className={`w-full h-full object-cover transition-all duration-1000 ${
               isLoaded ? "scale-100 opacity-100" : "scale-110 opacity-0"
             }`}
+            loading="lazy"
           />
         </div>
 
@@ -70,7 +103,9 @@ const ProjectDetail = () => {
           <div className="container-custom">
             <div
               className={`transition-all duration-1000 delay-300 ${
-                isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+                isLoaded
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-0 translate-y-10"
               }`}
             >
               <div className="flex flex-wrap gap-3 mb-6">
@@ -89,9 +124,11 @@ const ProjectDetail = () => {
                 {project.title}
               </h1>
 
-              <p className="text-primary-foreground/80 text-lg md:text-xl font-light max-w-2xl">
-                {project.subtitle}
-              </p>
+              {project.subtitle ? (
+                <p className="text-primary-foreground/80 text-lg md:text-xl font-light max-w-2xl">
+                  {project.subtitle}
+                </p>
+              ) : null}
             </div>
           </div>
         </div>
@@ -117,7 +154,10 @@ const ProjectDetail = () => {
 
               <div className="space-y-6 pt-8">
                 {(project.details || []).map((detail, index) => (
-                  <p key={index} className="text-body-large border-l-2 border-border pl-6">
+                  <p
+                    key={index}
+                    className="text-body-large border-l-2 border-border pl-6"
+                  >
                     {detail}
                   </p>
                 ))}
