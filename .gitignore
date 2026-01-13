@@ -20,6 +20,8 @@ backend/.venv/
 backend/__pycache__/
 backend/**/*.pyc
 backend/app/.env
+backend/app/.env.example
+
 
 # Uploads & storage
 backend/app/storage/uploads/
