@@ -19,7 +19,7 @@ yarn-error.log*
 backend/.venv/
 backend/__pycache__/
 backend/**/*.pyc
-backend/.env
+backend/app/.env
 
 # Uploads & storage
 backend/app/storage/uploads/
