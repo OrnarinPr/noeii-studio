@@ -34,6 +34,17 @@ const PRODUCT_CATEGORIES: Exclude<Category, "All">[] = [
   "Storage",
 ];
 
+// Prefer env for deploy, fallback for local dev
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://127.0.0.1:8000";
+
+function resolveImageUrl(url?: string) {
+  if (!url) return "";
+  // Backend serves /uploads via FastAPI StaticFiles
+  if (url.startsWith("/uploads/")) return `${API_BASE}${url}`;
+  return url;
+}
+
 function isAllowedImage(file: File) {
   const okType = ["image/png", "image/jpeg", "image/webp"].includes(file.type);
   const okSize = file.size <= 3 * 1024 * 1024; // 3MB
@@ -260,10 +271,11 @@ const Shop = () => {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`text-caption whitespace-nowrap transition-colors ${activeCategory === cat
+                    className={`text-caption whitespace-nowrap transition-colors ${
+                      activeCategory === cat
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground"
-                      }`}
+                    }`}
                   >
                     {cat}
                   </button>
@@ -310,11 +322,7 @@ const Shop = () => {
                 >
                   <div className="aspect-[4/5] bg-muted mb-6 overflow-hidden">
                     <img
-                      src={product.image.startsWith("/uploads/")
-                        ? `http://127.0.0.1:8000${product.image}`
-                        : product.image
-                      }
-
+                      src={resolveImageUrl(product.image)}
                       alt={product.name}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                       loading="lazy"
@@ -388,7 +396,7 @@ const Shop = () => {
 
             <div className="aspect-[4/3] overflow-hidden">
               <img
-                src={products[0]?.image}
+                src={resolveImageUrl(products[0]?.image)}
                 alt="Custom furniture"
                 className="w-full h-full object-cover"
                 loading="lazy"
@@ -400,7 +408,7 @@ const Shop = () => {
 
       <Footer />
 
-      {/* Editor Modal (Replaced with Right Drawer; old logic preserved) */}
+      {/* Editor Drawer */}
       {isAdmin && editMode && editorOpen && draft ? (
         <>
           {/* Overlay */}
@@ -468,7 +476,7 @@ const Shop = () => {
                   <div className="mb-3 border border-border bg-muted p-2">
                     {draft.image ? (
                       <img
-                        src={draft.image}
+                        src={resolveImageUrl(draft.image)}
                         alt="Preview"
                         className="admin-image-preview"
                         loading="lazy"

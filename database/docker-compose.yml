@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: noeii_postgres
+    environment:
+      POSTGRES_DB: noeii
+      POSTGRES_USER: noeii
+      POSTGRES_PASSWORD: noeii_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - noeii_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  noeii_pgdata:
