@@ -9,6 +9,11 @@ from app.routes.projects import router as projects_router
 from app.routes.products import router as products_router
 from app.routes.uploads import router as uploads_router
 
+import os
+print("ADMIN_PASSCODE =", os.getenv("ADMIN_PASSCODE"))
+print("ADMIN_TOTP_SECRET =", os.getenv("ADMIN_TOTP_SECRET"))
+
+
 app = FastAPI(title="NOEII Studio API", version="0.1.0")
 
 app.add_middleware(
