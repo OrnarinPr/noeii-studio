@@ -1,73 +1,117 @@
-# backend/app/storage/db_store.py
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional, Literal
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 
-# Adjust this import to match your db.py:
-# - If you have SessionLocal = sessionmaker(...), use that.
-# - If you have get_db() dependency, you can pass Session into functions instead.
-try:
-    from app.db import SessionLocal  # type: ignore
-except Exception:  # pragma: no cover
-    SessionLocal = None  # type: ignore
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session, sessionmaker
 
+load_dotenv()
 
 TableName = Literal["projects", "products"]
 
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set (backend/.env)")
 
-def _get_session(external_session: Optional[Session] = None) -> Session:
-    if external_session is not None:
-        return external_session
-    if SessionLocal is None:
-        raise RuntimeError("SessionLocal is not available. Check app.db import.")
-    return SessionLocal()
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def _session(db: Optional[Session] = None) -> Session:
+    return db or SessionLocal()
 
 
 def list_items(table: TableName, db: Optional[Session] = None) -> List[Dict[str, Any]]:
-    session = _get_session(db)
+    s = _session(db)
     close_after = db is None
     try:
-        rows = session.execute(text(f"select data from {table} order by updated_at desc")).all()
-        return [r[0] for r in rows]
+        rows = s.execute(text(f"select * from public.{table} order by updated_at desc")).mappings().all()
+        return [dict(r) for r in rows]
     finally:
         if close_after:
-            session.close()
+            s.close()
+
+
+def get_item_by_id(table: TableName, item_id: str, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
+    s = _session(db)
+    close_after = db is None
+    try:
+        row = s.execute(
+            text(f"select * from public.{table} where id = :id"),
+            {"id": item_id},
+        ).mappings().first()
+        return dict(row) if row else None
+    finally:
+        if close_after:
+            s.close()
 
 
 def upsert_item(table: TableName, item: Dict[str, Any], db: Optional[Session] = None) -> Dict[str, Any]:
-    if "id" not in item or not item["id"]:
+    if not item.get("id"):
         raise ValueError("item must contain a non-empty 'id'")
 
-    session = _get_session(db)
+    # Ensure arrays exist
+    if table == "projects":
+        item.setdefault("details", [])
+        item.setdefault("tags", [])
+
+        sql = text(
+            """
+            insert into public.projects
+            (id, image, title, subtitle, location, year, category, material, description, details, area, status, tags)
+            values
+            (:id, :image, :title, :subtitle, :location, :year, :category, :material, :description, :details, :area, :status, :tags)
+            on conflict (id) do update set
+              image = excluded.image,
+              title = excluded.title,
+              subtitle = excluded.subtitle,
+              location = excluded.location,
+              year = excluded.year,
+              category = excluded.category,
+              material = excluded.material,
+              description = excluded.description,
+              details = excluded.details,
+              area = excluded.area,
+              status = excluded.status,
+              tags = excluded.tags,
+              updated_at = now()
+            """
+        )
+    else:
+        sql = text(
+            """
+            insert into public.products
+            (id, name, image, description, category)
+            values
+            (:id, :name, :image, :description, :category)
+            on conflict (id) do update set
+              name = excluded.name,
+              image = excluded.image,
+              description = excluded.description,
+              category = excluded.category,
+              updated_at = now()
+            """
+        )
+
+    s = _session(db)
     close_after = db is None
     try:
-        session.execute(
-            text(
-                f"""
-                insert into {table} (id, data)
-                values (:id::text, :data::jsonb)
-                on conflict (id) do update
-                set data = excluded.data,
-                    updated_at = now()
-                """
-            ),
-            {"id": str(item["id"]), "data": item},
-        )
-        session.commit()
+        s.execute(sql, item)
+        s.commit()
         return item
     finally:
         if close_after:
-            session.close()
+            s.close()
 
 
 def delete_item(table: TableName, item_id: str, db: Optional[Session] = None) -> None:
-    session = _get_session(db)
+    s = _session(db)
     close_after = db is None
     try:
-        session.execute(text(f"delete from {table} where id = :id"), {"id": item_id})
-        session.commit()
+        s.execute(text(f"delete from public.{table} where id = :id"), {"id": item_id})
+        s.commit()
     finally:
         if close_after:
-            session.close()
+            s.close()

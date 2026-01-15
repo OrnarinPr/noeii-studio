@@ -1,26 +1,25 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from app.models import Product
 from app.auth import require_admin
-from app.storage.db_store import list_items, upsert_item, delete_item
+from app.storage.db_store import list_items, upsert_item, delete_item, get_item_by_id
 
 router = APIRouter()
 
 
-@router.get("")
+@router.get("/")
 def get_products():
     return list_items("products")
 
 
 @router.get("/{product_id}")
 def get_product(product_id: str):
-    items = list_items("products")
-    for x in items:
-        if x.get("id") == product_id:
-            return x
-    return None
+    item = get_item_by_id("products", product_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return item
 
 
-@router.post("")
+@router.post("/")
 def create_product(product: Product, _=Depends(require_admin)):
     return upsert_item("products", product.model_dump())
 
